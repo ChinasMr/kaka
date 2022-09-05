@@ -1,4 +1,4 @@
-module kaka
+module github.com/ChinasMr/kaka
 
 go 1.19
 
