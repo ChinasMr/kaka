@@ -1,0 +1,7 @@
+server:
+  rtsp:
+    port: 8554
+  rtp:
+    port: 8000
+  rtcp:
+    port: 8001

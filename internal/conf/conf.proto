@@ -1,0 +1,23 @@
+syntax = "proto3";
+package kaka;
+
+option go_package = "kaka/internal/conf;conf";
+
+message Bootstrap {
+  Server server = 1;
+}
+
+message Server {
+  message RTSP {
+    uint32 port = 1;
+  }
+  message RTP {
+    uint32 port = 1;
+  }
+  message RTCP {
+    uint32 port = 1;
+  }
+  RTSP rtsp = 1;
+  RTP rtp = 2;
+  RTCP rtcp = 3;
+}
