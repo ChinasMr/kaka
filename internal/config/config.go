@@ -1,6 +1,12 @@
 package config
 
-import "sync"
+import (
+	"context"
+	"errors"
+	"github.com/ChinasMr/kaka/internal/log"
+	"sync"
+	"time"
+)
 
 var (
 	_ Config = (*config)(nil)
@@ -28,21 +34,91 @@ type config struct {
 
 func (c *config) Load() error {
 	for _, src := range c.opts.sources {
+		// load bytes data from dir or file.
 		kvs, err := src.Load()
 		if err != nil {
 			return err
 		}
+		for _, v := range kvs {
+			log.Debugf("config loaded: %s format: %s", v.Key, v.Format)
+		}
+
+		// merge the configs.
+		err = c.reader.Merge(kvs...)
+		if err != nil {
+			log.Errorf("failed to merge config source: %v", err)
+			return err
+		}
+
+		w, err := src.Watch()
+		if err != nil {
+			log.Errorf("failed to watch config source: %v", err)
+			return err
+		}
+		// collect the watcher.
+		c.watchers = append(c.watchers, w)
+		go c.watch(w)
+	}
+	err := c.reader.Resolve()
+	if err != nil {
+		log.Errorf("failed to resolve config source: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (c *config) watch(w Watcher) {
+	for {
+		kvs, err := w.Next()
+		if errors.Is(err, context.Canceled) {
+			log.Infof("watcher's ctx cancel: %v", err)
+			return
+		}
+		if err != nil {
+			time.Sleep(time.Second)
+			log.Errorf("failed to watch next config: %v", err)
+			continue
+		}
+		// re merge.
+		err = c.reader.Merge(kvs...)
+		if err != nil {
+			log.Errorf("failed to merge next config: %v", err)
+			continue
+		}
+		err = c.reader.Resolve()
+		if err != nil {
+			log.Errorf("failed to resolve next config: %v", err)
+			continue
+		}
+		c.cached.Range(func(key, value any) bool {
+			//k := key.(string)
+			//v := value.(Value)
+			//if
+			return true
+		})
 	}
 }
 
 func (c *config) Scan(v interface{}) error {
-	//TODO implement me
-	panic("implement me")
+	data, err := c.reader.Source()
+	if err != nil {
+		return err
+	}
+	return unmarshalJSON(data, v)
 }
 
 func (c *config) Value(key string) Value {
-	//TODO implement me
-	panic("implement me")
+	v, ok := c.cached.Load(key)
+	if ok {
+		return v.(Value)
+	}
+	v, ok := c.reader.Value(key)
+	if ok {
+		c.cached.Store(key, v)
+		return v
+	}
+	return &er
+
 }
 
 func (c *config) Watch(key string, o Observer) error {
@@ -51,8 +127,13 @@ func (c *config) Watch(key string, o Observer) error {
 }
 
 func (c *config) Close() error {
-	//TODO implement me
-	panic("implement me")
+	for _, w := range c.watchers {
+		err := w.Stop()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // New a config with options.

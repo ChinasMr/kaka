@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+var _ config.Source = (*file)(nil)
+
 type file struct {
 	path string
 }
@@ -28,12 +30,13 @@ func (f *file) Load() ([]*config.KeyValue, error) {
 }
 
 func (f *file) Watch() (config.Watcher, error) {
-	//TODO implement me
-	panic("implement me")
+	return newWatcher(f)
 }
 
 func NewSource(path string) config.Source {
-	return &file{path: path}
+	return &file{
+		path: path,
+	}
 }
 
 func (f *file) loadDir(path string) ([]*config.KeyValue, error) {

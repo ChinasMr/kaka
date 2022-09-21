@@ -103,7 +103,42 @@ func (v *atomicValue) Map() (map[string]Value, error) {
 	panic("implement me")
 }
 
-func (v *atomicValue) Scan(i interface{}) error {
+func (v *atomicValue) Scan(obj interface{}) error {
 	//TODO implement me
 	panic("implement me")
+}
+
+type errValue struct {
+	err error
+}
+
+func (v errValue) Bool() (bool, error) {
+	return false, v.err
+}
+func (v errValue) Int() (int64, error) {
+	return 0, v.err
+}
+func (v errValue) Float() (float64, error) {
+	return 0.0, v.err
+}
+func (v errValue) Duration() (time.Duration, error) {
+	return 0, v.err
+}
+func (v errValue) String() (string, error) {
+	return "", v.err
+}
+func (v errValue) Scan(interface{}) error {
+	return v.err
+}
+func (v errValue) Load() interface{} {
+	return nil
+}
+func (v errValue) Store(interface{}) {
+
+}
+func (v errValue) Slice() ([]Value, error) {
+	return nil, v.err
+}
+func (v errValue) Map() (map[string]Value, error) {
+	return nil, v.err
 }

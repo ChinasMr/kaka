@@ -25,6 +25,15 @@ type reader struct {
 	lock   sync.Mutex
 }
 
+// NewReader return a reader.
+func NewReader(opts options) Reader {
+	return &reader{
+		opts:   opts,
+		values: make(map[string]interface{}),
+		lock:   sync.Mutex{},
+	}
+}
+
 func (r *reader) Merge(kvs ...*KeyValue) error {
 	r.lock.Lock()
 	merged, err := cloneMap(r.values)
@@ -34,12 +43,14 @@ func (r *reader) Merge(kvs ...*KeyValue) error {
 	}
 	for _, kv := range kvs {
 		next := make(map[string]interface{})
-		if err1 := r.opts.decoder(kv, next); err1 != nil {
+		err1 := r.opts.decoder(kv, next)
+		if err1 != nil {
 			log.Errorf("Failed to config decode error: %v key: %s value: %s", err1, kv.Key, string(kv.Value))
 			return err1
 		}
 		// todo there may be a bug.
-		if err1 := mergo.Map(&merged, next, mergo.WithOverride); err1 != nil {
+		err1 = mergo.Map(&merged, next, mergo.WithOverride)
+		if err1 != nil {
 			log.Errorf("Failed to config merge error: %v key: %s value: %s", err1, kv.Key, string(kv.Value))
 			return err1
 		}
@@ -66,14 +77,6 @@ func (r *reader) Resolve() error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	return r.opts.resolver(r.values)
-}
-
-func NewReader(opts options) Reader {
-	return &reader{
-		opts:   opts,
-		values: make(map[string]interface{}),
-		lock:   sync.Mutex{},
-	}
 }
 
 func cloneMap(src map[string]interface{}) (map[string]interface{}, error) {
@@ -127,4 +130,12 @@ func marshalJSON(v interface{}) ([]byte, error) {
 		}.Marshal(m)
 	}
 	return json.Marshal(v)
+}
+
+func unmarshalJSON(data []byte, v interface{}) error {
+	m, ok := v.(proto.Message)
+	if ok {
+		return protojson.UnmarshalOptions{DiscardUnknown: true}.Unmarshal(data, m)
+	}
+	return json.Unmarshal(data, v)
 }
