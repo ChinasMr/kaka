@@ -1,9 +1,12 @@
 package config
 
+// Decoder is config decoder.
 type Decoder func(*KeyValue, map[string]interface{}) error
 
+// Resolver resolve placeholder in config.
 type Resolver func(map[string]interface{}) error
 
+// Option is config option.
 type Option func(*options)
 
 type options struct {

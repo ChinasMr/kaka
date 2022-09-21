@@ -2,8 +2,14 @@ package config
 
 import "sync"
 
+var (
+	_ Config = (*config)(nil)
+)
+
+// Observer is config observer.
 type Observer func(string, Value)
 
+// Config is a config interface.
 type Config interface {
 	Load() error
 	Scan(v interface{}) error
@@ -21,8 +27,12 @@ type config struct {
 }
 
 func (c *config) Load() error {
-	//TODO implement me
-	panic("implement me")
+	for _, src := range c.opts.sources {
+		kvs, err := src.Load()
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func (c *config) Scan(v interface{}) error {
@@ -45,6 +55,7 @@ func (c *config) Close() error {
 	panic("implement me")
 }
 
+// New a config with options.
 func New(opts ...Option) Config {
 	o := options{
 		sources:  nil,

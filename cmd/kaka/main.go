@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"github.com/ChinasMr/kaka/internal/config"
 	"github.com/ChinasMr/kaka/internal/log"
 	"os"
 )
@@ -25,7 +24,7 @@ func main() {
 		"caller", log.DefaultCaller)
 	l := log.NewHelper(logger)
 	l.Infof("can not create app: %v", "err: can not open database")
-	c := config.New(
-		config.WithSource(),
-	)
+	//c := config.New(
+	//	config.WithSource(),
+	//)
 }
