@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"github.com/ChinasMr/kaka/internal/encoding"
+	"github.com/ChinasMr/kaka/pkg/encoding"
 	"regexp"
 	"strings"
 )

@@ -2,11 +2,11 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"github.com/ChinasMr/kaka/internal/conf"
-	"github.com/ChinasMr/kaka/internal/config"
-	"github.com/ChinasMr/kaka/internal/config/file"
-	"github.com/ChinasMr/kaka/internal/log"
+	"github.com/ChinasMr/kaka/pkg/app"
+	"github.com/ChinasMr/kaka/pkg/config"
+	"github.com/ChinasMr/kaka/pkg/config/file"
+	"github.com/ChinasMr/kaka/pkg/log"
 	"os"
 )
 
@@ -21,13 +21,23 @@ func init() {
 	flag.StringVar(&flagConfig, "conf", "../../configs", "config path, eg: -conf config.yaml")
 }
 
+func newApp(logger log.Logger) *app.App {
+	return app.New(
+		app.ID(id),
+		app.Name(Name),
+		app.Version(Version),
+		app.Metadata(map[string]string{}),
+		app.Logger(logger),
+		app.Server(),
+	)
+}
+
 func main() {
 	flag.Parse()
 	logger := log.With(log.NewStdLogger(os.Stdout),
 		"ts", log.DefaultTimestamp,
 		"caller", log.DefaultCaller)
-	l := log.NewHelper(logger)
-	l.Infof("can not create app: %v", "err: can not open database")
+
 	c := config.New(
 		config.WithSource(
 			file.NewSource(flagConfig),
@@ -43,14 +53,14 @@ func main() {
 		panic(err)
 	}
 
-	err = c.Watch("server.rtsp.port", func(s string, value config.Value) {
-		i, _ := value.Int()
-
-		fmt.Printf("new rtsp port is %d", i)
-	})
+	app, cleanup, err := wireApp(bc.Server, logger)
 	if err != nil {
 		panic(err)
 	}
-	ch := make(chan bool)
-	ch <- true
+	defer cleanup()
+
+	err = app.Run()
+	if err != nil {
+		panic(err)
+	}
 }

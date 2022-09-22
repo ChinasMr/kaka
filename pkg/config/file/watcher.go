@@ -2,7 +2,7 @@ package file
 
 import (
 	"context"
-	"github.com/ChinasMr/kaka/internal/config"
+	"github.com/ChinasMr/kaka/pkg/config"
 	"github.com/fsnotify/fsnotify"
 	"os"
 	"path/filepath"

@@ -3,12 +3,12 @@ package config
 import (
 	"context"
 	"errors"
-	"github.com/ChinasMr/kaka/internal/log"
+	"github.com/ChinasMr/kaka/pkg/log"
 	"reflect"
 	"sync"
 	"time"
 
-	_ "github.com/ChinasMr/kaka/internal/encoding/yaml"
+	_ "github.com/ChinasMr/kaka/pkg/encoding/yaml"
 )
 
 var (

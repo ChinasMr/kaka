@@ -22,6 +22,10 @@ func (a *loggerAppliance) SetLogger(in Logger) {
 	a.Logger = in
 }
 
+func SetLogger(logger Logger) {
+	global.SetLogger(logger)
+}
+
 func Errorf(format string, a ...interface{}) {
 	_ = global.Log(LevelError, DefaultMessageKey, fmt.Sprintf(format, a...))
 }

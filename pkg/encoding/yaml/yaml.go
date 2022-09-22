@@ -1,7 +1,7 @@
 package yaml
 
 import (
-	"github.com/ChinasMr/kaka/internal/encoding"
+	"github.com/ChinasMr/kaka/pkg/encoding"
 	"gopkg.in/yaml.v3"
 )
 

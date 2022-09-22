@@ -5,7 +5,7 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
-	"github.com/ChinasMr/kaka/internal/log"
+	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/imdario/mergo"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"

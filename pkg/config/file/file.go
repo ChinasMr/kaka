@@ -1,7 +1,7 @@
 package file
 
 import (
-	"github.com/ChinasMr/kaka/internal/config"
+	"github.com/ChinasMr/kaka/pkg/config"
 	"io"
 	"os"
 	"path/filepath"
