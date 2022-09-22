@@ -2,9 +2,12 @@ package app
 
 import (
 	"context"
+	"errors"
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 	"os"
+	"os/signal"
 	"sync"
 	"syscall"
 	"time"
@@ -25,7 +28,43 @@ type App struct {
 }
 
 func (a *App) Run() error {
-	for true {
+	eg, ctx := errgroup.WithContext(NewContext(a.ctx, a))
+	wg := sync.WaitGroup{}
+	for _, srv := range a.opts.servers {
+		server := srv
+		eg.Go(func() error {
+			<-ctx.Done()
+			stopCtx, cancel := context.WithTimeout(NewContext(a.opts.ctx, a), a.opts.stopTimeout)
+			defer cancel()
+			return server.Stop(stopCtx)
+		})
+		wg.Add(1)
+		eg.Go(func() error {
+			wg.Done()
+			return server.Start(NewContext(a.opts.ctx, a))
+		})
+	}
+	wg.Wait()
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, a.opts.signals...)
+	eg.Go(func() error {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-c:
+			return a.Stop()
+		}
+	})
+	err := eg.Wait()
+	if err != nil && !errors.Is(err, context.Canceled) {
+		return err
+	}
+	return nil
+}
+
+func (a *App) Stop() error {
+	if a.cancel != nil {
+		a.cancel()
 	}
 	return nil
 }
@@ -69,4 +108,10 @@ func New(opts ...Option) *App {
 		cancel: cancel,
 		mu:     sync.Mutex{},
 	}
+}
+
+type appKey struct{}
+
+func NewContext(ctx context.Context, s Info) context.Context {
+	return context.WithValue(ctx, appKey{}, s)
 }

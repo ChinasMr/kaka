@@ -7,6 +7,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/google/wire v0.5.0
 	github.com/imdario/mergo v0.3.13
+	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	google.golang.org/grpc v1.49.0
 	google.golang.org/protobuf v1.28.1
 )
