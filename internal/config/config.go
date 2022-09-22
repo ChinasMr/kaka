@@ -4,11 +4,19 @@ import (
 	"context"
 	"errors"
 	"github.com/ChinasMr/kaka/internal/log"
+	"reflect"
 	"sync"
 	"time"
+
+	_ "github.com/ChinasMr/kaka/internal/encoding/yaml"
 )
 
 var (
+	// ErrNotFound is key not found.
+	ErrNotFound = errors.New("key not found")
+	// ErrTypeAssert is type assert error.
+	ErrTypeAssert = errors.New("type assert error")
+
 	_ Config = (*config)(nil)
 )
 
@@ -30,6 +38,25 @@ type config struct {
 	cached    sync.Map
 	Observers sync.Map
 	watchers  []Watcher
+}
+
+// New a config with options.
+func New(opts ...Option) Config {
+	o := options{
+		sources:  nil,
+		decoder:  DefaultDecoder,
+		resolver: DefaultResolver,
+	}
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return &config{
+		opts:      o,
+		reader:    NewReader(o),
+		cached:    sync.Map{},
+		Observers: sync.Map{},
+		watchers:  nil,
+	}
 }
 
 func (c *config) Load() error {
@@ -90,10 +117,19 @@ func (c *config) watch(w Watcher) {
 			log.Errorf("failed to resolve next config: %v", err)
 			continue
 		}
+		// key may be aaa.bbb.ccc
 		c.cached.Range(func(key, value any) bool {
-			//k := key.(string)
-			//v := value.(Value)
-			//if
+			k := key.(string)
+			v := value.(Value)
+			n, ok := c.reader.Value(k)
+			if ok && reflect.TypeOf(n.Load()) == reflect.TypeOf(v.Load()) &&
+				!reflect.DeepEqual(n.Load(), v.Load()) {
+				v.Store(n.Load())
+				o, ok1 := c.Observers.Load(k)
+				if ok1 {
+					o.(Observer)(k, v)
+				}
+			}
 			return true
 		})
 	}
@@ -108,22 +144,27 @@ func (c *config) Scan(v interface{}) error {
 }
 
 func (c *config) Value(key string) Value {
-	v, ok := c.cached.Load(key)
+	cv, ok := c.cached.Load(key)
 	if ok {
-		return v.(Value)
+		return cv.(Value)
 	}
 	v, ok := c.reader.Value(key)
 	if ok {
 		c.cached.Store(key, v)
 		return v
 	}
-	return &er
+	return &errValue{err: ErrNotFound}
 
 }
 
+// Watch registers an observer.
 func (c *config) Watch(key string, o Observer) error {
-	//TODO implement me
-	panic("implement me")
+	v := c.Value(key)
+	if v.Load() == nil {
+		return ErrNotFound
+	}
+	c.Observers.Store(key, o)
+	return nil
 }
 
 func (c *config) Close() error {
@@ -134,23 +175,4 @@ func (c *config) Close() error {
 		}
 	}
 	return nil
-}
-
-// New a config with options.
-func New(opts ...Option) Config {
-	o := options{
-		sources:  nil,
-		decoder:  DefaultDecoder,
-		resolver: DefaultResolver,
-	}
-	for _, opt := range opts {
-		opt(&o)
-	}
-	return &config{
-		opts:      o,
-		reader:    NewReader(o),
-		cached:    sync.Map{},
-		Observers: sync.Map{},
-		watchers:  nil,
-	}
 }

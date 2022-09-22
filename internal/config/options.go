@@ -42,6 +42,7 @@ func DefaultDecoder(src *KeyValue, target map[string]interface{}) error {
 		}
 		return nil
 	}
+	// get a decoder
 	codec := encoding.GetCodec(src.Format)
 	if codec != nil {
 		return codec.Unmarshal(src.Value, &target)

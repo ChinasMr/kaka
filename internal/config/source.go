@@ -1,6 +1,9 @@
 package config
 
 // KeyValue is config key value.
+// if source is a file, key is file name,
+// value is the file content,
+// format is file format suffix.
 type KeyValue struct {
 	Key    string
 	Value  []byte

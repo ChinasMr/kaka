@@ -14,29 +14,31 @@ type file struct {
 	path string
 }
 
+func NewSource(path string) config.Source {
+	return &file{
+		path: path,
+	}
+}
+
 func (f *file) Load() ([]*config.KeyValue, error) {
-	fi, err := os.Stat(f.path)
+	fileInfo, err := os.Stat(f.path)
 	if err != nil {
 		return nil, err
 	}
-	if fi.IsDir() {
+	if fileInfo.IsDir() {
 		return f.loadDir(f.path)
 	}
 	kv, err := f.loadFile(f.path)
 	if err != nil {
 		return nil, err
 	}
-	return []*config.KeyValue{kv}, nil
+	return []*config.KeyValue{
+		kv,
+	}, nil
 }
 
 func (f *file) Watch() (config.Watcher, error) {
 	return newWatcher(f)
-}
-
-func NewSource(path string) config.Source {
-	return &file{
-		path: path,
-	}
 }
 
 func (f *file) loadDir(path string) ([]*config.KeyValue, error) {
@@ -82,6 +84,7 @@ func (f *file) loadFile(path string) (*config.KeyValue, error) {
 }
 
 func format(name string) string {
+	// if file name ends with .xxx, return xxx.
 	if p := strings.Split(name, "."); len(p) > 1 {
 		return p[len(p)-1]
 	}

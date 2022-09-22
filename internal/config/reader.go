@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"fmt"
 	"github.com/ChinasMr/kaka/internal/log"
 	"github.com/imdario/mergo"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -48,8 +49,7 @@ func (r *reader) Merge(kvs ...*KeyValue) error {
 			log.Errorf("Failed to config decode error: %v key: %s value: %s", err1, kv.Key, string(kv.Value))
 			return err1
 		}
-		// todo there may be a bug.
-		err1 = mergo.Map(&merged, next, mergo.WithOverride)
+		err1 = mergo.Map(&merged, convertMap(next), mergo.WithOverride)
 		if err1 != nil {
 			log.Errorf("Failed to config merge error: %v key: %s value: %s", err1, kv.Key, string(kv.Value))
 			return err1
@@ -70,13 +70,40 @@ func (r *reader) Value(path string) (Value, bool) {
 func (r *reader) Source() ([]byte, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	return marshalJSON(r.values)
+	return marshalJSON(convertMap(r.values))
 }
 
 func (r *reader) Resolve() error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	return r.opts.resolver(r.values)
+}
+
+func convertMap(src interface{}) interface{} {
+	switch m := src.(type) {
+	case map[string]interface{}:
+		dst := make(map[string]interface{}, len(m))
+		for k, v := range m {
+			dst[k] = convertMap(v)
+		}
+		return dst
+	case map[interface{}]interface{}:
+		dst := make(map[string]interface{}, len(m))
+		for k, v := range m {
+			dst[fmt.Sprint(k)] = convertMap(v)
+		}
+		return dst
+	case []interface{}:
+		dst := make([]interface{}, len(m))
+		for k, v := range m {
+			dst[k] = convertMap(v)
+		}
+		return dst
+	case []byte:
+		return string(m)
+	default:
+		return src
+	}
 }
 
 func cloneMap(src map[string]interface{}) (map[string]interface{}, error) {
@@ -100,6 +127,7 @@ func cloneMap(src map[string]interface{}) (map[string]interface{}, error) {
 func readValue(values map[string]interface{}, path string) (Value, bool) {
 	var (
 		next = values
+		// aaa.bbb
 		keys = strings.Split(path, ".")
 		last = len(keys) - 1
 	)
