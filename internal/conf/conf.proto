@@ -2,22 +2,23 @@ syntax = "proto3";
 package kaka;
 
 option go_package = "kaka/internal/conf;conf";
+import "google/protobuf/duration.proto";
 
 message Bootstrap {
   Server server = 1;
 }
 
 message Server {
-  message RTSP {
-    uint32 port = 1;
+  message GRPC {
+    string network = 1;
+    string addr = 2;
+    google.protobuf.Duration timeout = 3;
   }
-  message RTP {
-    uint32 port = 1;
+  message Stream {
+    uint32 rtsp = 1;
+    uint32 rtp = 2;
+    uint32 rtcp = 3;
   }
-  message RTCP {
-    uint32 port = 1;
-  }
-  RTSP rtsp = 1;
-  RTP rtp = 2;
-  RTCP rtcp = 3;
+  GRPC grpc = 1;
+  Stream stream = 2;
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/ChinasMr/kaka/pkg/config"
 	"github.com/ChinasMr/kaka/pkg/config/file"
 	"github.com/ChinasMr/kaka/pkg/log"
+	"github.com/ChinasMr/kaka/pkg/transport/grpc"
 	"os"
 )
 
@@ -21,14 +22,16 @@ func init() {
 	flag.StringVar(&flagConfig, "conf", "../../configs", "config path, eg: -conf config.yaml")
 }
 
-func newApp(logger log.Logger) *app.App {
+func newApp(logger log.Logger, gs *grpc.Server) *app.App {
 	return app.New(
 		app.ID(id),
 		app.Name(Name),
 		app.Version(Version),
 		app.Metadata(map[string]string{}),
 		app.Logger(logger),
-		app.Server(),
+		app.Server(
+			gs,
+		),
 	)
 }
 
