@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package api.kaka.v1;
+
+option go_package = "kaka/api/kaka/v1;v1";
+
+service Kaka {
+  rpc Debug(DebugRequest) returns (DebugReply) {}
+}
+
+message DebugRequest {}
+message DebugReply {
+  string id = 1;
+  string name = 2;
+  string version = 3;
+  map<string, string> metadata = 4;
+}
