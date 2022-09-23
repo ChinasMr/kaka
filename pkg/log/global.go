@@ -34,6 +34,10 @@ func Debugf(format string, a ...interface{}) {
 	_ = global.Log(LevelDebug, DefaultMessageKey, fmt.Sprintf(format, a...))
 }
 
+func Info(a ...interface{}) {
+	_ = global.Log(LevelInfo, DefaultMessageKey, fmt.Sprintln(a...))
+}
+
 func Infof(format string, a ...interface{}) {
 	_ = global.Log(LevelInfo, DefaultMessageKey, fmt.Sprintf(format, a...))
 }

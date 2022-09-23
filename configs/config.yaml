@@ -1,7 +1,8 @@
 server:
-  rtsp:
-    port: 8554
-  rtp:
-    port: 8000
-  rtcp:
-    port: 8001
+  grpc:
+    addr: 0.0.0.0:9000
+    timeout: 10s
+  stream:
+    rtsp: 8554
+    rtp: 8000
+    rtcp: 8001
