@@ -19,7 +19,8 @@ import (
 func wireApp(confServer *conf.Server, logger log.Logger) (*app.App, func(), error) {
 	kakaService := service.NewKakaService(logger)
 	grpcServer := server.NewGRPCServer(confServer, kakaService)
-	appApp := newApp(logger, grpcServer)
+	rtspServer := server.NewRTSPServer(confServer)
+	appApp := newApp(logger, grpcServer, rtspServer)
 	return appApp, func() {
 	}, nil
 }

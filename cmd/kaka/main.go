@@ -8,6 +8,7 @@ import (
 	"github.com/ChinasMr/kaka/pkg/config/file"
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/grpc"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp"
 	"os"
 )
 
@@ -22,7 +23,7 @@ func init() {
 	flag.StringVar(&flagConfig, "conf", "../../configs", "config path, eg: -conf config.yaml")
 }
 
-func newApp(logger log.Logger, gs *grpc.Server) *app.App {
+func newApp(logger log.Logger, gs *grpc.Server, rtsp *rtsp.Server) *app.App {
 	return app.New(
 		app.ID(id),
 		app.Name(Name),
@@ -31,6 +32,7 @@ func newApp(logger log.Logger, gs *grpc.Server) *app.App {
 		app.Logger(logger),
 		app.Server(
 			gs,
+			rtsp,
 		),
 	)
 }

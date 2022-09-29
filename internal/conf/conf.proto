@@ -15,9 +15,9 @@ message Server {
     google.protobuf.Duration timeout = 3;
   }
   message Stream {
-    uint32 rtsp = 1;
-    uint32 rtp = 2;
-    uint32 rtcp = 3;
+    string rtsp = 1;
+    string rtp = 2;
+    string rtcp = 3;
   }
   GRPC grpc = 1;
   Stream stream = 2;
