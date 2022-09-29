@@ -2,11 +2,12 @@ package server
 
 import (
 	"github.com/ChinasMr/kaka/internal/conf"
+	"github.com/ChinasMr/kaka/internal/service"
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp"
 )
 
-func NewRTSPServer(c *conf.Server, logger log.Logger) *rtsp.Server {
+func NewRTSPServer(c *conf.Server, service *service.KakaService, logger log.Logger) *rtsp.Server {
 	var opts = []rtsp.ServerOption{
 		rtsp.Logger(logger),
 	}
@@ -14,5 +15,6 @@ func NewRTSPServer(c *conf.Server, logger log.Logger) *rtsp.Server {
 		opts = append(opts, rtsp.Address(c.Rtsp.Addr))
 	}
 	srv := rtsp.NewServer(opts...)
+	srv.RegisterHandler(service)
 	return srv
 }

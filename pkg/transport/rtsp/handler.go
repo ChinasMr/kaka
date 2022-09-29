@@ -16,9 +16,8 @@ type UnimplementedServerHandler struct {
 }
 
 func (u *UnimplementedServerHandler) DESCRIBE(req *Request, res *Response) error {
-	log.Debugf("describe request input data: %+v", req)
-	res.SetContent(nil)
-	return nil
+	//TODO implement me
+	panic("implement me")
 }
 
 func (u *UnimplementedServerHandler) OPTIONS(req *Request, res *Response) error {

@@ -46,6 +46,7 @@ func (s *Server) serveStream(trans ServerTransport) {
 			if err == io.EOF {
 				continue
 			}
+			s.log.Errorf("can not parse rtsp request: %v", err)
 			return
 		}
 		var (
@@ -113,7 +114,7 @@ func (s *Server) Start(ctx context.Context) error {
 	return s.serve(s.lis)
 }
 
-func (s *Server) Stop(ctx context.Context) error {
+func (s *Server) Stop(_ context.Context) error {
 	s.GracefulStop()
 	log.Info("[gRPC] server stopping")
 	return nil
@@ -129,6 +130,13 @@ func (s *Server) listen() error {
 		s.lis = lis
 	}
 	return s.err
+}
+
+func (s *Server) RegisterHandler(handler Handler) {
+	if handler == nil {
+		return
+	}
+	s.handler = handler
 }
 
 func (s *Server) GracefulStop() {
