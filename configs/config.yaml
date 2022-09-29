@@ -2,7 +2,6 @@ server:
   grpc:
     addr: 0.0.0.0:9000
     timeout: 10s
-  stream:
-    rtsp: 0.0.0.0:8554
-    rtp: 0.0.0.0:8000
-    rtcp: 0.0.0.0:8001
+  rtsp:
+    addr: 0.0.0.0:9001
+    timeout: 10s

@@ -45,3 +45,7 @@ func (h *Helper) Infof(format string, a ...interface{}) {
 func (h *Helper) Infow(a ...interface{}) {
 	_ = h.logger.Log(LevelInfo, fmt.Sprint(a...))
 }
+
+func (h *Helper) Errorf(format string, a ...interface{}) {
+	_ = h.logger.Log(LevelError, h.msgKey, fmt.Sprintf(format, a...))
+}

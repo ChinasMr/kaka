@@ -1,21 +1,17 @@
 package rtsp
 
+import "github.com/ChinasMr/kaka/pkg/log"
+
 type ServerOption func(s *Server)
 
-func RTSP(addr string) ServerOption {
+func Address(addr string) ServerOption {
 	return func(s *Server) {
-		s.rtspPort = addr
+		s.address = addr
 	}
 }
 
-func RTP(addr string) ServerOption {
+func Logger(logger log.Logger) ServerOption {
 	return func(s *Server) {
-		s.rtpPort = addr
-	}
-}
-
-func RTCP(addr string) ServerOption {
-	return func(s *Server) {
-		s.rtcpPort = addr
+		s.log = log.NewHelper(logger)
 	}
 }

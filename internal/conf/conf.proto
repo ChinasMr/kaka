@@ -14,11 +14,11 @@ message Server {
     string addr = 2;
     google.protobuf.Duration timeout = 3;
   }
-  message Stream {
-    string rtsp = 1;
-    string rtp = 2;
-    string rtcp = 3;
+  message RTSP {
+    string network = 1;
+    string addr = 2;
+    google.protobuf.Duration timeout = 3;
   }
   GRPC grpc = 1;
-  Stream stream = 2;
+  RTSP rtsp = 2;
 }

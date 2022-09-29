@@ -7,8 +7,7 @@ tip:
 Your ultimate Go microservices framework for the cloud-native era.   
 https://github.com/go-kratos/kratos
 
-We 100% copied some code from kratos.   
-Why not just import?   
+We 100% copied some code from kratos.Why not just import?   
 *For beginners, kratos and its examples are very good materials for learning go language and microservices.*
 *So the best way to taste it is to read its source code.*
 *There are too many in kratos that its development team summarizes best practices in the production environment.*
