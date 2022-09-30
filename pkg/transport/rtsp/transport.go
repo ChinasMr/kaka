@@ -18,11 +18,16 @@ type ServerTransport interface {
 	Request() (*Request, error)
 	Response(response *Response) error
 	Addr() net.Addr
+	RawConn() net.Conn
 	Close() error
 }
 
-type grpcTransport struct {
+type Transport struct {
 	conn net.Conn
+}
+
+func (g Transport) RawConn() net.Conn {
+	return g.conn
 }
 
 var readerPool sync.Pool
@@ -40,7 +45,7 @@ func putTextProtoReader(r *textproto.Reader) {
 	readerPool.Put(r)
 }
 
-func (g grpcTransport) Request() (*Request, error) {
+func (g Transport) Request() (*Request, error) {
 	br := bufio.NewReader(g.conn)
 	tp := newTextProtoReader(br)
 
@@ -112,7 +117,7 @@ func parseRequestLine(line string) (string, string, string, bool) {
 	return method, requestURI, proto, true
 }
 
-func (g grpcTransport) Response(res *Response) error {
+func (g Transport) Response(res *Response) error {
 	buf := bytes.Buffer{}
 	buf.WriteString(fmt.Sprintf("%s %s %s\r\n",
 		res.proto, strconv.FormatUint(res.statusCode, 10), res.status))
@@ -140,18 +145,16 @@ func (g grpcTransport) Response(res *Response) error {
 	return err
 }
 
-func (g grpcTransport) Addr() net.Addr {
-	//TODO implement me
-	panic("implement me")
+func (g Transport) Addr() net.Addr {
+	return g.conn.RemoteAddr()
 }
 
-func (g grpcTransport) Close() error {
-	//TODO implement me
-	panic("implement me")
+func (g Transport) Close() error {
+	return g.conn.Close()
 }
 
-func NewGrpcTransport(conn net.Conn) ServerTransport {
-	return &grpcTransport{
+func NewTransport(conn net.Conn) ServerTransport {
+	return &Transport{
 		conn: conn,
 	}
 }

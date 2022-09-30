@@ -8,4 +8,5 @@ type Request interface {
 	Headers() map[string][]string
 	Content() []byte
 	Header(key string) ([]string, bool)
+	Transport() (map[string]struct{}, bool)
 }

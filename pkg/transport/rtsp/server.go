@@ -1,7 +1,9 @@
 package rtsp
 
 import (
+	"bufio"
 	"context"
+	"encoding/binary"
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
 	"io"
@@ -39,6 +41,34 @@ func NewServer(opts ...ServerOption) *Server {
 	return srv
 }
 
+func (s *Server) serveRTP(conn net.Conn) {
+	log.Debugf("-------start recording ....")
+	packet := make([]byte, 2048)
+	bf := bufio.NewReader(conn)
+	for {
+		// sender report
+		bs, err := bf.Peek(4)
+		if err != nil {
+			return
+		}
+		_, _ = bf.Discard(4)
+		if bs[0] != 0x24 || bs[1] != 0x00 {
+			return
+		}
+
+		pl := binary.BigEndian.Uint32(bs[2:])
+		if pl > 2048 {
+			return
+		}
+		_, err = io.ReadFull(bf, packet[:pl])
+		if err != nil {
+			return
+		}
+		// todo forward to other client.
+
+	}
+}
+
 func (s *Server) serveStream(trans ServerTransport) {
 	for {
 		request, err := trans.Request()
@@ -63,7 +93,14 @@ func (s *Server) serveStream(trans ServerTransport) {
 			err1 = s.handler.SETUP(request, response)
 		case method.ANNOUNCE:
 			err1 = s.handler.ANNOUNCE(request, response)
-
+		case method.RECORD:
+			err1 = s.handler.RECORD(request, response)
+			err1 = trans.Response(response)
+			if err1 != nil {
+				s.log.Errorf("can not response to %s: %v", trans.Addr(), err1)
+			}
+			s.serveRTP(trans.RawConn())
+			return
 		default:
 			s.log.Errorf("unknown method: %s", request.Method())
 			continue
@@ -91,7 +128,7 @@ func (s *Server) handleRawConn(conn net.Conn) {
 }
 
 func (s *Server) newRTSPTransport(c net.Conn) ServerTransport {
-	return NewGrpcTransport(c)
+	return NewTransport(c)
 }
 
 func (s *Server) serve(lis net.Listener) error {

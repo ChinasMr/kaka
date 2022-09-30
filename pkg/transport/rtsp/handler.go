@@ -11,12 +11,20 @@ type Handler interface {
 	DESCRIBE(req *Request, res *Response) error
 	SETUP(req *Request, res *Response) error
 	ANNOUNCE(req *Request, res *Response) error
+	RECORD(req *Request, res *Response) error
 }
 
 var _ Handler = (*UnimplementedServerHandler)(nil)
 
 type UnimplementedServerHandler struct {
 	sdp []byte
+}
+
+func (u *UnimplementedServerHandler) RECORD(req *Request, res *Response) error {
+	log.Debugf("-->record request input data: %+v", req)
+	res.SetHeader("Session", "12345678")
+	log.Debugf("<--record response output data: %+v", res)
+	return nil
 }
 
 func (u *UnimplementedServerHandler) ANNOUNCE(req *Request, res *Response) error {
@@ -31,12 +39,42 @@ func (u *UnimplementedServerHandler) ANNOUNCE(req *Request, res *Response) error
 	body := req.content
 	u.sdp = body
 	log.Debugf("content body: %s", string(body))
+	log.Debugf("<--announce response output data: %+v", res)
 	return nil
 }
 
 func (u *UnimplementedServerHandler) SETUP(req *Request, res *Response) error {
-	//TODO implement me
-	panic("implement me")
+	log.Debugf("-->setup request input data: %+v", req)
+	transports, ok := req.Transport()
+	if !ok {
+		return fmt.Errorf("err setup can not get transport")
+	}
+	_, ok = transports["unicast"]
+	if !ok {
+		return fmt.Errorf("err setup can not get unicast")
+	}
+	_, ok = transports["mode=record"]
+	if !ok {
+		return fmt.Errorf("err setup can not get mode=record")
+	}
+
+	_, isUDP := transports["RTP/AVP/UDP"]
+	_, isTCP := transports["RTP/AVP/TCP"]
+	if isUDP == false && isTCP == false {
+		return fmt.Errorf("err setup can not get RTP/AVP/UDP or RTP/AVP/TCP")
+	}
+	if isTCP {
+		res.SetHeader("Transport", strings.Join([]string{
+			"RTP/AVP/TCP",
+			"unicast",
+			"destionation=127.0.0.1",
+			"source=127.0.0.1",
+		}, ";"))
+		res.SetHeader("Session", "12345678")
+	}
+
+	log.Debugf("<--setup response output data: %+v", transports)
+	return nil
 }
 
 func (u *UnimplementedServerHandler) DESCRIBE(req *Request, res *Response) error {

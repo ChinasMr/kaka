@@ -7,4 +7,5 @@ const (
 	DESCRIBE Method = "DESCRIBE"
 	ANNOUNCE Method = "ANNOUNCE"
 	SETUP    Method = "SETUP"
+	RECORD   Method = "RECORD"
 )
