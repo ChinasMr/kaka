@@ -16,6 +16,11 @@ type Request struct {
 	proto   string
 }
 
+func (r Request) Header(key string) ([]string, bool) {
+	rv, ok := r.headers[key]
+	return rv, ok
+}
+
 func (r Request) Content() []byte {
 	return r.content
 }

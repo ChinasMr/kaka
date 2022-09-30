@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	method2 "github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
+	"io"
 	"net"
 	"net/textproto"
 	"sort"
@@ -57,17 +58,45 @@ func (g grpcTransport) Request() (*Request, error) {
 	if !ok {
 		return nil, fmt.Errorf("malformed RTSP request: %s", s)
 	}
+
+	if proto != "RTSP/1.0" {
+		return nil, fmt.Errorf("unsupported rtsp version: %s", method)
+	}
+
 	mimeHeader, err := tp.ReadMIMEHeader()
 	if err != nil {
 		return nil, err
 	}
-	cSeq := mimeHeader["Cseq"][0]
+
+	cSeq, ok := mimeHeader["Cseq"]
+	if !ok || len(cSeq) == 0 {
+		return nil, fmt.Errorf("can parse cseq header, request: %s", s)
+	}
+
+	var content []byte
+	cl, ok := mimeHeader["Content-Length"]
+	if ok && len(cl) > 0 {
+		ln, err1 := strconv.ParseUint(cl[0], 10, 64)
+		if err1 != nil {
+			return nil, err1
+		}
+		content = make([]byte, ln)
+		n, err1 := io.ReadFull(g.conn, content)
+		if err1 != nil {
+			return nil, err1
+		}
+
+		if uint64(n) != ln {
+			return nil, fmt.Errorf("err content lenth")
+		}
+	}
+
 	req := &Request{
 		method:  method2.Method(method),
 		path:    url,
 		headers: mimeHeader,
-		content: nil,
-		cSeq:    cSeq,
+		content: content,
+		cSeq:    cSeq[0],
 		proto:   proto,
 	}
 

@@ -7,4 +7,5 @@ type Request interface {
 	Path() string
 	Headers() map[string][]string
 	Content() []byte
+	Header(key string) ([]string, bool)
 }

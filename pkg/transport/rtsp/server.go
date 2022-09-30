@@ -50,7 +50,7 @@ func (s *Server) serveStream(trans ServerTransport) {
 			return
 		}
 		var (
-			response = NewResponse(request.cSeq, request.proto)
+			response = NewResponse(request.proto, request.cSeq)
 			err1     error
 		)
 
@@ -59,6 +59,11 @@ func (s *Server) serveStream(trans ServerTransport) {
 			err1 = s.handler.OPTIONS(request, response)
 		case method.DESCRIBE:
 			err1 = s.handler.DESCRIBE(request, response)
+		case method.SETUP:
+			err1 = s.handler.SETUP(request, response)
+		case method.ANNOUNCE:
+			err1 = s.handler.ANNOUNCE(request, response)
+
 		default:
 			s.log.Errorf("unknown method: %s", request.Method())
 			continue
@@ -95,6 +100,7 @@ func (s *Server) serve(lis net.Listener) error {
 		if err != nil {
 			return nil
 		}
+		s.log.Debugf("new connection created from: %v", rawConn.RemoteAddr().String())
 		s.serveWG.Add(1)
 		go func() {
 			s.handleRawConn(rawConn)
