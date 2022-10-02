@@ -7,7 +7,9 @@
 package main
 
 import (
+	"github.com/ChinasMr/kaka/internal/biz"
 	"github.com/ChinasMr/kaka/internal/conf"
+	"github.com/ChinasMr/kaka/internal/data"
 	"github.com/ChinasMr/kaka/internal/server"
 	"github.com/ChinasMr/kaka/internal/service"
 	"github.com/ChinasMr/kaka/pkg/app"
@@ -17,7 +19,9 @@ import (
 // Injectors from wire.go:
 
 func wireApp(confServer *conf.Server, logger log.Logger) (*app.App, func(), error) {
-	kakaService := service.NewKakaService(logger)
+	roomRepo := data.NewRoomRepo(logger)
+	kakaUseCase := biz.NewKakaUseCase(logger, roomRepo)
+	kakaService := service.NewKakaService(logger, kakaUseCase)
 	grpcServer := server.NewGRPCServer(confServer, kakaService)
 	rtspServer := server.NewRTSPServer(confServer, kakaService, logger)
 	appApp := newApp(logger, grpcServer, rtspServer)

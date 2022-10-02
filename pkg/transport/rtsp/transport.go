@@ -5,28 +5,41 @@ import (
 	"bytes"
 	"fmt"
 	method2 "github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"io"
 	"net"
 	"net/textproto"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 )
 
-type ServerTransport interface {
-	Request() (*Request, error)
-	Response(response *Response) error
+type Transport interface {
 	Addr() net.Addr
 	RawConn() net.Conn
+	Status() status.Status
 	Close() error
 }
 
-type Transport struct {
-	conn net.Conn
+type transport struct {
+	conn   net.Conn
+	status status.Status
 }
 
-func (g Transport) RawConn() net.Conn {
+func NewTransport(conn net.Conn) *transport {
+	return &transport{
+		conn:   conn,
+		status: status.STARING,
+	}
+}
+
+func (g transport) Status() status.Status {
+	return g.status
+}
+
+func (g transport) RawConn() net.Conn {
 	return g.conn
 }
 
@@ -45,7 +58,7 @@ func putTextProtoReader(r *textproto.Reader) {
 	readerPool.Put(r)
 }
 
-func (g Transport) Request() (*Request, error) {
+func (g transport) parseRequest() (*request, error) {
 	br := bufio.NewReader(g.conn)
 	tp := newTextProtoReader(br)
 
@@ -59,13 +72,18 @@ func (g Transport) Request() (*Request, error) {
 		putTextProtoReader(tp)
 	}()
 
-	method, url, proto, ok := parseRequestLine(s)
+	method, urlRaw, proto, ok := parseRequestLine(s)
 	if !ok {
 		return nil, fmt.Errorf("malformed RTSP request: %s", s)
 	}
 
 	if proto != "RTSP/1.0" {
 		return nil, fmt.Errorf("unsupported rtsp version: %s", method)
+	}
+
+	urlParsed, err := url.Parse(urlRaw)
+	if err != nil {
+		return nil, err
 	}
 
 	mimeHeader, err := tp.ReadMIMEHeader()
@@ -78,15 +96,15 @@ func (g Transport) Request() (*Request, error) {
 		return nil, fmt.Errorf("can parse cseq header, request: %s", s)
 	}
 
-	var content []byte
+	var body []byte
 	cl, ok := mimeHeader["Content-Length"]
 	if ok && len(cl) > 0 {
 		ln, err1 := strconv.ParseUint(cl[0], 10, 64)
 		if err1 != nil {
 			return nil, err1
 		}
-		content = make([]byte, ln)
-		n, err1 := io.ReadFull(g.conn, content)
+		body = make([]byte, ln)
+		n, err1 := io.ReadFull(g.conn, body)
 		if err1 != nil {
 			return nil, err1
 		}
@@ -96,11 +114,12 @@ func (g Transport) Request() (*Request, error) {
 		}
 	}
 
-	req := &Request{
+	req := &request{
 		method:  method2.Method(method),
-		path:    url,
+		url:     urlParsed,
+		path:    urlParsed.Path,
 		headers: mimeHeader,
-		content: content,
+		body:    body,
 		cSeq:    cSeq[0],
 		proto:   proto,
 	}
@@ -117,11 +136,11 @@ func parseRequestLine(line string) (string, string, string, bool) {
 	return method, requestURI, proto, true
 }
 
-func (g Transport) Response(res *Response) error {
+func (g transport) sendResponse(res *response) error {
 	buf := bytes.Buffer{}
 	buf.WriteString(fmt.Sprintf("%s %s %s\r\n",
 		res.proto, strconv.FormatUint(res.statusCode, 10), res.status))
-	cl := uint64(len(res.Content))
+	cl := uint64(len(res.body))
 	if cl > 0 {
 		res.SetHeader("Content-Length", strconv.FormatUint(cl, 10))
 	}
@@ -138,23 +157,17 @@ func (g Transport) Response(res *Response) error {
 	buf.WriteString("\r\n")
 
 	if cl > 0 {
-		buf.Write(res.Content)
+		buf.Write(res.body)
 	}
 
 	_, err := g.conn.Write(buf.Bytes())
 	return err
 }
 
-func (g Transport) Addr() net.Addr {
+func (g transport) Addr() net.Addr {
 	return g.conn.RemoteAddr()
 }
 
-func (g Transport) Close() error {
+func (g transport) Close() error {
 	return g.conn.Close()
-}
-
-func NewTransport(conn net.Conn) ServerTransport {
-	return &Transport{
-		conn: conn,
-	}
 }

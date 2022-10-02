@@ -3,15 +3,17 @@ package rtsp
 import (
 	"fmt"
 	"github.com/ChinasMr/kaka/pkg/log"
+	"net/url"
 	"strings"
 )
 
 type Handler interface {
-	OPTIONS(req *Request, res *Response) error
-	DESCRIBE(req *Request, res *Response) error
-	SETUP(req *Request, res *Response) error
-	ANNOUNCE(req *Request, res *Response) error
-	RECORD(req *Request, res *Response) error
+	OPTIONS(req Request, res Response, tx Transport) error
+	DESCRIBE(req Request, res Response, tx Transport) error
+	SETUP(req Request, res Response, tx Transport) error
+	ANNOUNCE(req Request, res Response, tx Transport) error
+	RECORD(req Request, res Response, tx Transport) error
+	TEARDOWN(req Request, res Response, tx Transport) error
 }
 
 var _ Handler = (*UnimplementedServerHandler)(nil)
@@ -20,30 +22,22 @@ type UnimplementedServerHandler struct {
 	sdp []byte
 }
 
-func (u *UnimplementedServerHandler) RECORD(req *Request, res *Response) error {
+func (u *UnimplementedServerHandler) TEARDOWN(req Request, res Response, tx Transport) error {
+	panic("implement me")
+}
+
+func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transport) error {
 	log.Debugf("-->record request input data: %+v", req)
 	res.SetHeader("Session", "12345678")
 	log.Debugf("<--record response output data: %+v", res)
 	return nil
 }
 
-func (u *UnimplementedServerHandler) ANNOUNCE(req *Request, res *Response) error {
-	log.Debugf("-->announce request input data: %+v", req)
-	ct, ok := req.Header("Content-Type")
-	if !ok || len(ct) == 0 {
-		return fmt.Errorf("can not get content type")
-	}
-	if ct[0] != "application/sdp" {
-		return fmt.Errorf("err content type")
-	}
-	body := req.content
-	u.sdp = body
-	log.Debugf("content body: %s", string(body))
-	log.Debugf("<--announce response output data: %+v", res)
-	return nil
+func (u *UnimplementedServerHandler) ANNOUNCE(req Request, res Response, tx Transport) error {
+	panic("implement me")
 }
 
-func (u *UnimplementedServerHandler) SETUP(req *Request, res *Response) error {
+func (u *UnimplementedServerHandler) SETUP(req Request, res Response, tx Transport) error {
 	log.Debugf("-->setup request input data: %+v", req)
 	transports, ok := req.Transport()
 	if !ok {
@@ -77,24 +71,22 @@ func (u *UnimplementedServerHandler) SETUP(req *Request, res *Response) error {
 	return nil
 }
 
-func (u *UnimplementedServerHandler) DESCRIBE(req *Request, res *Response) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (u *UnimplementedServerHandler) OPTIONS(req *Request, res *Response) error {
+func (u *UnimplementedServerHandler) DESCRIBE(req Request, res Response, tx Transport) error {
 	log.Debugf("-->options request input data: %+v", req)
-	res.SetHeader("Public",
-		strings.Join([]string{
-			"DESCRIBE",
-			"ANNOUNCE",
-			"SETUP",
-			"PLAY",
-			"PAUSE",
-			"RECORD",
-			"TEARDOWN",
-		}, ", "),
-	)
+	if u.sdp == nil || len(u.sdp) == 0 {
+		return fmt.Errorf("this is no sdo info")
+	}
+	ur, err := url.Parse(req.Path())
+	if err != nil {
+		return nil
+	}
+	res.SetHeader("Content-Base", ur.String())
+	res.SetHeader("Content-Type", "application/sdp")
+	res.SetBody(u.sdp)
 	log.Debugf("<--options response output data: %+v", res)
 	return nil
+}
+
+func (u *UnimplementedServerHandler) OPTIONS(_ Request, _ Response, _ Transport) error {
+	panic("implement me")
 }

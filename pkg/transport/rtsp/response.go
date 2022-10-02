@@ -1,37 +1,41 @@
 package rtsp
 
-import "github.com/ChinasMr/kaka/pkg/transport/rtsp/transport"
+type Response interface {
+	Code(c uint64)
+	SetHeader(key string, value ...string)
+	SetBody(body []byte)
+}
 
-var _ transport.Response = (*Response)(nil)
+var _ Response = (*response)(nil)
 
-type Response struct {
+type response struct {
 	proto      string
 	statusCode uint64
 	status     string
 	headers    map[string][]string
-	Content    []byte
+	body       []byte
 }
 
-func (r *Response) SetContent(body []byte) {
-	r.Content = body
+func (r *response) SetBody(body []byte) {
+	r.body = body
 }
 
-func NewResponse(proto string, cSeq string) *Response {
-	return &Response{
+func NewResponse(proto string, cSeq string) *response {
+	return &response{
 		proto:      proto,
 		statusCode: 200,
 		status:     "OK",
 		headers: map[string][]string{
 			"CSeq": {cSeq},
 		},
-		Content: nil,
+		body: nil,
 	}
 }
 
-func (r *Response) SetHeader(key string, value ...string) {
+func (r *response) SetHeader(key string, value ...string) {
 	r.headers[key] = value
 }
 
-func (r *Response) Code(c uint64) {
+func (r *response) Code(c uint64) {
 	r.statusCode = c
 }

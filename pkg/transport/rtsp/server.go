@@ -22,7 +22,6 @@ type Server struct {
 
 	log     *log.Helper
 	handler Handler
-	conns   map[ServerTransport]bool
 	serveWG sync.WaitGroup
 	mutex   sync.Mutex
 }
@@ -56,7 +55,7 @@ func (s *Server) serveRTP(conn net.Conn) {
 			return
 		}
 
-		pl := binary.BigEndian.Uint32(bs[2:])
+		pl := binary.BigEndian.Uint16(bs[2:])
 		if pl > 2048 {
 			return
 		}
@@ -65,13 +64,16 @@ func (s *Server) serveRTP(conn net.Conn) {
 			return
 		}
 		// todo forward to other client.
-
+		//fmt.Println(string(packet))
+		//for conn := range s.conns {
+		//
+		//}
 	}
 }
 
-func (s *Server) serveStream(trans ServerTransport) {
+func (s *Server) serveStream(trans *transport) {
 	for {
-		request, err := trans.Request()
+		req, err := trans.parseRequest()
 		if err != nil {
 			if err == io.EOF {
 				continue
@@ -80,29 +82,29 @@ func (s *Server) serveStream(trans ServerTransport) {
 			return
 		}
 		var (
-			response = NewResponse(request.proto, request.cSeq)
-			err1     error
+			res  = NewResponse(req.proto, req.cSeq)
+			err1 error
 		)
 
-		switch request.Method() {
+		switch req.Method() {
 		case method.OPTIONS:
-			err1 = s.handler.OPTIONS(request, response)
+			err1 = s.handler.OPTIONS(req, res, trans)
 		case method.DESCRIBE:
-			err1 = s.handler.DESCRIBE(request, response)
+			err1 = s.handler.DESCRIBE(req, res, trans)
 		case method.SETUP:
-			err1 = s.handler.SETUP(request, response)
+			err1 = s.handler.SETUP(req, res, trans)
 		case method.ANNOUNCE:
-			err1 = s.handler.ANNOUNCE(request, response)
+			err1 = s.handler.ANNOUNCE(req, res, trans)
 		case method.RECORD:
-			err1 = s.handler.RECORD(request, response)
-			err1 = trans.Response(response)
-			if err1 != nil {
-				s.log.Errorf("can not response to %s: %v", trans.Addr(), err1)
-			}
-			s.serveRTP(trans.RawConn())
+			err1 = s.handler.RECORD(req, res, trans)
+			return
+		//case method.PLAY:
+		//	err1 = s.handler.
+		case method.TEARDOWN:
+			_ = s.handler.TEARDOWN(req, res, trans)
 			return
 		default:
-			s.log.Errorf("unknown method: %s", request.Method())
+			s.log.Errorf("unknown method: %s", req.Method())
 			continue
 		}
 		if err1 != nil {
@@ -110,25 +112,18 @@ func (s *Server) serveStream(trans ServerTransport) {
 			continue
 		}
 
-		err1 = trans.Response(response)
+		err1 = trans.sendResponse(res)
 		if err1 != nil {
 			s.log.Errorf("can not response to %s: %v", trans.Addr(), err1)
+			return
 		}
 	}
 }
 
 func (s *Server) handleRawConn(conn net.Conn) {
 	// build transport
-	nt := s.newRTSPTransport(conn)
-	// add
-	go func() {
-		s.serveStream(nt)
-		// remove
-	}()
-}
-
-func (s *Server) newRTSPTransport(c net.Conn) ServerTransport {
-	return NewTransport(c)
+	nt := NewTransport(conn)
+	s.serveStream(nt)
 }
 
 func (s *Server) serve(lis net.Listener) error {
@@ -141,6 +136,8 @@ func (s *Server) serve(lis net.Listener) error {
 		s.serveWG.Add(1)
 		go func() {
 			s.handleRawConn(rawConn)
+			_ = rawConn.Close()
+			s.log.Debugf("connection closed to: %v", rawConn.RemoteAddr().String())
 			s.serveWG.Done()
 		}()
 	}

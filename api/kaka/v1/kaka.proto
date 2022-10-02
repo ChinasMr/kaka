@@ -5,6 +5,8 @@ package api.kaka.v1;
 option go_package = "kaka/api/kaka/v1;v1";
 
 service Kaka {
+//  rpc CreateRoom(CreateRoomRequest) returns (CreateRoomReply) {}
+//
   rpc Debug(DebugRequest) returns (DebugReply) {}
 }
 

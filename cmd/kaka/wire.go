@@ -4,6 +4,8 @@
 package main
 
 import (
+	"github.com/ChinasMr/kaka/internal/biz"
+	"github.com/ChinasMr/kaka/internal/data"
 	"github.com/ChinasMr/kaka/internal/server"
 	"github.com/ChinasMr/kaka/internal/service"
 	"github.com/ChinasMr/kaka/pkg/log"
@@ -16,5 +18,5 @@ import (
 )
 
 func wireApp(*conf.Server, log.Logger) (*app.App, func(), error) {
-	panic(wire.Build(newApp, server.ProviderSet, service.ProviderSet))
+	panic(wire.Build(newApp, server.ProviderSet, service.ProviderSet, biz.ProviderSet, data.ProviderSet))
 }
