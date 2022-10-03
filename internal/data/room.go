@@ -16,6 +16,19 @@ type roomRepo struct {
 	rwm   sync.RWMutex
 }
 
+func (r *roomRepo) SetRoomInput(_ context.Context, id string, room *biz.Room) error {
+	r.rwm.Lock()
+	defer r.rwm.Unlock()
+	ro, ok := r.rooms[id]
+	if !ok {
+		return fmt.Errorf("room not found")
+	}
+	ro.Source = room.Source
+	ro.SDP = room.SDP
+	ro.SDPRaw = room.SDPRaw
+	return nil
+}
+
 func (r *roomRepo) Get(_ context.Context, id string) (*biz.Room, error) {
 	r.rwm.RLock()
 	defer r.rwm.RUnlock()

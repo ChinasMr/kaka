@@ -16,16 +16,26 @@ import (
 	"sync"
 )
 
+var _ Transport = (*transport)(nil)
+
 type Transport interface {
 	Addr() net.Addr
 	RawConn() net.Conn
 	Status() status.Status
+	SetStatus(s status.Status)
 	Close() error
 }
 
 type transport struct {
 	conn   net.Conn
 	status status.Status
+	rwm    sync.RWMutex
+}
+
+func (g *transport) SetStatus(s status.Status) {
+	g.rwm.Lock()
+	defer g.rwm.Unlock()
+	g.status = s
 }
 
 func NewTransport(conn net.Conn) *transport {
@@ -35,11 +45,13 @@ func NewTransport(conn net.Conn) *transport {
 	}
 }
 
-func (g transport) Status() status.Status {
+func (g *transport) Status() status.Status {
+	g.rwm.RLock()
+	g.rwm.RUnlock()
 	return g.status
 }
 
-func (g transport) RawConn() net.Conn {
+func (g *transport) RawConn() net.Conn {
 	return g.conn
 }
 
@@ -58,7 +70,7 @@ func putTextProtoReader(r *textproto.Reader) {
 	readerPool.Put(r)
 }
 
-func (g transport) parseRequest() (*request, error) {
+func (g *transport) parseRequest() (*request, error) {
 	br := bufio.NewReader(g.conn)
 	tp := newTextProtoReader(br)
 
@@ -136,7 +148,7 @@ func parseRequestLine(line string) (string, string, string, bool) {
 	return method, requestURI, proto, true
 }
 
-func (g transport) sendResponse(res *response) error {
+func (g *transport) sendResponse(res *response) error {
 	buf := bytes.Buffer{}
 	buf.WriteString(fmt.Sprintf("%s %s %s\r\n",
 		res.proto, strconv.FormatUint(res.statusCode, 10), res.status))
@@ -164,10 +176,10 @@ func (g transport) sendResponse(res *response) error {
 	return err
 }
 
-func (g transport) Addr() net.Addr {
+func (g *transport) Addr() net.Addr {
 	return g.conn.RemoteAddr()
 }
 
-func (g transport) Close() error {
+func (g *transport) Close() error {
 	return g.conn.Close()
 }

@@ -59,7 +59,7 @@ func (s *KakaService) OPTIONS(_ rtsp.Request, res rtsp.Response, tx rtsp.Transpo
 	return nil
 }
 
-func (s *KakaService) ANNOUNCE(req rtsp.Request, res rtsp.Response, tx rtsp.Transport) error {
+func (s *KakaService) ANNOUNCE(req rtsp.Request, _ rtsp.Response, tx rtsp.Transport) error {
 	log.Debugf("announce request from %s", tx.Addr().String())
 	if tx.Status() != status.STARING {
 		return fmt.Errorf("trans status error")
@@ -75,9 +75,22 @@ func (s *KakaService) ANNOUNCE(req rtsp.Request, res rtsp.Response, tx rtsp.Tran
 	if err != nil {
 		return fmt.Errorf("can not decode sdp message")
 	}
-	fmt.Println(message)
-
+	id := parseRoomId(req.Path())
+	err = s.uc.SetRoomInput(context.Background(), id, &biz.Room{
+		Source:    tx,
+		Terminals: nil,
+		SDP:       message,
+		SDPRaw:    req.Body(),
+	})
+	if err != nil {
+		return err
+	}
+	tx.SetStatus(status.ANNOUNCED)
 	return nil
+}
+
+func parseRoomId(p string) string {
+	return strings.TrimLeft(p, "/")
 }
 
 func decodeSDP(content []byte) (*sdp.Message, error) {
