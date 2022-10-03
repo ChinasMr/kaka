@@ -6,4 +6,6 @@ const (
 	STARING Status = iota
 	ANNOUNCED
 	PRERECORD
+	RECORD
+	PLAY
 )

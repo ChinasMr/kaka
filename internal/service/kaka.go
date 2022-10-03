@@ -45,7 +45,7 @@ func (s *KakaService) Debug(ctx context.Context, req *pb.DebugRequest) (*pb.Debu
 }
 
 func (s *KakaService) OPTIONS(_ rtsp.Request, res rtsp.Response, tx rtsp.Transport) error {
-	log.Debugf("options request from %s", tx.Addr().String())
+	s.log.Debugf("options request from %s", tx.Addr().String())
 	methods := strings.Join([]string{
 		method.DESCRIBE.String(),
 		method.ANNOUNCE.String(),
@@ -60,7 +60,7 @@ func (s *KakaService) OPTIONS(_ rtsp.Request, res rtsp.Response, tx rtsp.Transpo
 }
 
 func (s *KakaService) ANNOUNCE(req rtsp.Request, _ rtsp.Response, tx rtsp.Transport) error {
-	log.Debugf("announce request from %s", tx.Addr().String())
+	s.log.Debugf("announce request from %s", tx.Addr().String())
 	if tx.Status() != status.STARING {
 		return fmt.Errorf("trans status error")
 	}
@@ -90,7 +90,7 @@ func (s *KakaService) ANNOUNCE(req rtsp.Request, _ rtsp.Response, tx rtsp.Transp
 }
 
 func (s *KakaService) SETUP(req rtsp.Request, res rtsp.Response, tx rtsp.Transport) error {
-	log.Debugf("setup request from: %+v", tx.Addr().String())
+	s.log.Debugf("setup request from: %+v", tx.Addr().String())
 	transports, ok := req.Transport()
 	if !ok {
 		return fmt.Errorf("err setup can not get transport")
@@ -133,7 +133,38 @@ func (s *KakaService) SETUP(req rtsp.Request, res rtsp.Response, tx rtsp.Transpo
 
 	}
 
-	return nil
+	// play
+
+	return fmt.Errorf("status error")
+}
+
+func (s *KakaService) RECORD(req rtsp.Request, res rtsp.Response, tx rtsp.Transport) error {
+	s.log.Debugf("record request from: %s", tx.Addr().String())
+	id := parseRoomId(req.Path())
+	room, err := s.uc.GetRoom(context.Background(), id)
+	if err != nil {
+		return err
+	}
+	res.SetHeader("Session", "12345678")
+	err = tx.SendResponse(res)
+	if err != nil {
+		return err
+	}
+	tx.SetStatus(status.RECORD)
+	s.log.Debugf("-------start recording ....")
+	buf := make([]byte, 2048)
+
+	for {
+		channel, frameLen, err1 := tx.ReadInterleavedFrame(buf)
+		if err1 != nil {
+			return err1
+		}
+		for _, terminal := range room.Terminals {
+			if terminal.Status() == status.PLAY {
+				_ = tx.WriteInterleavedFrame(channel, buf[:frameLen])
+			}
+		}
+	}
 }
 
 func parseRoomId(p string) string {

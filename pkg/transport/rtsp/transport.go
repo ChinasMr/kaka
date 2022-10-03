@@ -3,6 +3,7 @@ package rtsp
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	method2 "github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
@@ -19,10 +20,13 @@ import (
 var _ Transport = (*transport)(nil)
 
 type Transport interface {
+	SendResponse(res Response) error
 	Addr() net.Addr
 	RawConn() net.Conn
 	Status() status.Status
 	SetStatus(s status.Status)
+	ReadInterleavedFrame(frame []byte) (int, uint32, error)
+	WriteInterleavedFrame(channel int, frame []byte) error
 	Close() error
 }
 
@@ -30,6 +34,58 @@ type transport struct {
 	conn   net.Conn
 	status status.Status
 	rwm    sync.RWMutex
+}
+
+func (g *transport) WriteInterleavedFrame(channel int, frame []byte) error {
+	buf := make([]byte, 2048)
+	buf[0] = 0x24
+	buf[1] = byte(channel)
+	binary.BigEndian.PutUint16(buf[2:], uint16(len(frame)))
+	n := copy(buf[4:], frame)
+	_, err := g.conn.Write(buf[:4+n])
+	return err
+}
+
+func (g *transport) ReadInterleavedFrame(frame []byte) (int, uint32, error) {
+	if g.Status() != status.RECORD {
+		return -1, 0, fmt.Errorf("status error")
+	}
+
+	// interleavedHeader example
+	// Magic:0x24   bytes 1
+	// Channel:0x01 bytes 2
+	// Length:84    bytes 3-4
+	interleavedHeader := make([]byte, 4)
+	_, err := io.ReadFull(g.conn, interleavedHeader)
+	if err != nil {
+		return -1, 0, err
+	}
+
+	if interleavedHeader[0] == 0x54 {
+		return -1, 0, io.EOF
+	}
+
+	if interleavedHeader[0] == 0x24 {
+		return -1, 0, fmt.Errorf("magic byte error")
+	}
+
+	frameLen := binary.BigEndian.Uint16(interleavedHeader[2:])
+	if frameLen > 2048 {
+		return -1, 0, fmt.Errorf("freame len greater than 2048")
+	}
+	_, err = io.ReadFull(g.conn, frame[:frameLen])
+	if err != nil {
+		return -1, 0, err
+	}
+	return int(interleavedHeader[1]), uint32(frameLen), nil
+}
+
+func (g *transport) SendResponse(res Response) error {
+	r, ok := res.(*response)
+	if !ok {
+		return fmt.Errorf("res is not a response")
+	}
+	return g.SendResponse(r)
 }
 
 func (g *transport) SetStatus(s status.Status) {

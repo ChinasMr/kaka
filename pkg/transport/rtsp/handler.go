@@ -26,10 +26,7 @@ func (u *UnimplementedServerHandler) TEARDOWN(req Request, res Response, tx Tran
 }
 
 func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transport) error {
-	log.Debugf("-->record request input data: %+v", req)
-	res.SetHeader("Session", "12345678")
-	log.Debugf("<--record response output data: %+v", res)
-	return nil
+	panic("implement me")
 }
 
 func (u *UnimplementedServerHandler) ANNOUNCE(req Request, res Response, tx Transport) error {

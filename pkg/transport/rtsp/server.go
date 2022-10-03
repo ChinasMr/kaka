@@ -1,9 +1,7 @@
 package rtsp
 
 import (
-	"bufio"
 	"context"
-	"encoding/binary"
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
 	"io"
@@ -40,37 +38,6 @@ func NewServer(opts ...ServerOption) *Server {
 	return srv
 }
 
-func (s *Server) serveRTP(conn net.Conn) {
-	log.Debugf("-------start recording ....")
-	packet := make([]byte, 2048)
-	bf := bufio.NewReader(conn)
-	for {
-		// sender report
-		bs, err := bf.Peek(4)
-		if err != nil {
-			return
-		}
-		_, _ = bf.Discard(4)
-		if bs[0] != 0x24 || bs[1] != 0x00 {
-			return
-		}
-
-		pl := binary.BigEndian.Uint16(bs[2:])
-		if pl > 2048 {
-			return
-		}
-		_, err = io.ReadFull(bf, packet[:pl])
-		if err != nil {
-			return
-		}
-		// todo forward to other client.
-		//fmt.Println(string(packet))
-		//for conn := range s.conns {
-		//
-		//}
-	}
-}
-
 func (s *Server) serveStream(trans *transport) {
 	for {
 		req, err := trans.parseRequest()
@@ -97,6 +64,9 @@ func (s *Server) serveStream(trans *transport) {
 			err1 = s.handler.ANNOUNCE(req, res, trans)
 		case method.RECORD:
 			err1 = s.handler.RECORD(req, res, trans)
+			if err1 != nil {
+				s.log.Errorf("can not record: %v", err1)
+			}
 			return
 		//case method.PLAY:
 		//	err1 = s.handler.
