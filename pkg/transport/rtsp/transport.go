@@ -65,7 +65,7 @@ func (g *transport) ReadInterleavedFrame(frame []byte) (int, uint32, error) {
 		return -1, 0, io.EOF
 	}
 
-	if interleavedHeader[0] == 0x24 {
+	if interleavedHeader[1] == 0x24 {
 		return -1, 0, fmt.Errorf("magic byte error")
 	}
 
@@ -97,7 +97,7 @@ func (g *transport) SetStatus(s status.Status) {
 func NewTransport(conn net.Conn) *transport {
 	return &transport{
 		conn:   conn,
-		status: status.STARING,
+		status: status.STARTING,
 	}
 }
 

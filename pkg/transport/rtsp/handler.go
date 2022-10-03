@@ -1,17 +1,12 @@
 package rtsp
 
-import (
-	"fmt"
-	"github.com/ChinasMr/kaka/pkg/log"
-	"net/url"
-)
-
 type Handler interface {
 	OPTIONS(req Request, res Response, tx Transport) error
 	DESCRIBE(req Request, res Response, tx Transport) error
 	SETUP(req Request, res Response, tx Transport) error
 	ANNOUNCE(req Request, res Response, tx Transport) error
 	RECORD(req Request, res Response, tx Transport) error
+	PLAY(req Request, res Response, tx Transport) error
 	TEARDOWN(req Request, res Response, tx Transport) error
 }
 
@@ -19,6 +14,10 @@ var _ Handler = (*UnimplementedServerHandler)(nil)
 
 type UnimplementedServerHandler struct {
 	sdp []byte
+}
+
+func (u *UnimplementedServerHandler) PLAY(req Request, res Response, tx Transport) error {
+	panic("implement me")
 }
 
 func (u *UnimplementedServerHandler) TEARDOWN(req Request, res Response, tx Transport) error {
@@ -38,19 +37,7 @@ func (u *UnimplementedServerHandler) SETUP(req Request, res Response, tx Transpo
 }
 
 func (u *UnimplementedServerHandler) DESCRIBE(req Request, res Response, tx Transport) error {
-	log.Debugf("-->options request input data: %+v", req)
-	if u.sdp == nil || len(u.sdp) == 0 {
-		return fmt.Errorf("this is no sdo info")
-	}
-	ur, err := url.Parse(req.Path())
-	if err != nil {
-		return nil
-	}
-	res.SetHeader("Content-Base", ur.String())
-	res.SetHeader("Content-Type", "application/sdp")
-	res.SetBody(u.sdp)
-	log.Debugf("<--options response output data: %+v", res)
-	return nil
+	panic("implement me")
 }
 
 func (u *UnimplementedServerHandler) OPTIONS(_ Request, _ Response, _ Transport) error {

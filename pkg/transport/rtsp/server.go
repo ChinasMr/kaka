@@ -2,6 +2,7 @@ package rtsp
 
 import (
 	"context"
+	"fmt"
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
 	"io"
@@ -68,18 +69,25 @@ func (s *Server) serveStream(trans *transport) {
 				s.log.Errorf("can not record: %v", err1)
 			}
 			return
-		//case method.PLAY:
-		//	err1 = s.handler.
+		case method.PLAY:
+			err1 = s.handler.PLAY(req, res, trans)
+			if err1 != nil {
+				s.log.Errorf("can not play: %v", err1)
+			}
+			return
 		case method.TEARDOWN:
 			_ = s.handler.TEARDOWN(req, res, trans)
 			return
 		default:
-			s.log.Errorf("unknown method: %s", req.Method())
-			continue
+			err1 = fmt.Errorf("unknown method: %s", req.Method())
 		}
 		if err1 != nil {
-			s.log.Errorf("can not serve: %v", err)
-			continue
+			s.log.Errorf("can not serve: %v", err1)
+			errRes := NewResponse(req.proto, req.cSeq)
+			errRes.statusCode = 400
+			errRes.status = "Bad Request"
+			_ = trans.sendResponse(errRes)
+			return
 		}
 
 		err1 = trans.sendResponse(res)

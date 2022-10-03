@@ -3,9 +3,10 @@ package status
 type Status uint32
 
 const (
-	STARING Status = iota
+	STARTING Status = iota
 	ANNOUNCED
 	PRERECORD
 	RECORD
+	PREPLAY
 	PLAY
 )
