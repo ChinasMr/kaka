@@ -1,6 +1,7 @@
 package rtsp
 
 import (
+	"fmt"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
 	"net/url"
 	"strings"
@@ -8,13 +9,35 @@ import (
 
 var _ Request = (*request)(nil)
 
+type TransportHeader map[string]struct{}
+
+func (t TransportHeader) Has(keys ...string) bool {
+	for _, key := range keys {
+		_, ok := t[key]
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func (t TransportHeader) Value(k string) string {
+	prefix := fmt.Sprintf("%s=", k)
+	for key := range t {
+		if strings.HasPrefix(key, prefix) {
+			return key[len(prefix):]
+		}
+	}
+	return ""
+}
+
 type Request interface {
 	Method() method.Method
 	URL() *url.URL
 	Path() string
 	Headers() map[string][]string
 	Header(key string) ([]string, bool)
-	Transport() (map[string]struct{}, bool)
+	Transport() (TransportHeader, bool)
 	CSeq() string
 	Proto() string
 	Body() []byte
@@ -46,7 +69,7 @@ func (r request) CSeq() string {
 	return r.cSeq
 }
 
-func (r request) Transport() (map[string]struct{}, bool) {
+func (r request) Transport() (TransportHeader, bool) {
 	trans, ok := r.headers["Transport"]
 	if ok == false || len(trans) == 0 {
 		return nil, ok

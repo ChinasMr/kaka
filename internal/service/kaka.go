@@ -89,6 +89,53 @@ func (s *KakaService) ANNOUNCE(req rtsp.Request, _ rtsp.Response, tx rtsp.Transp
 	return nil
 }
 
+func (s *KakaService) SETUP(req rtsp.Request, res rtsp.Response, tx rtsp.Transport) error {
+	log.Debugf("setup request from: %+v", tx.Addr().String())
+	transports, ok := req.Transport()
+	if !ok {
+		return fmt.Errorf("err setup can not get transport")
+	}
+	ok = transports.Has("unicast")
+	if !ok {
+		return fmt.Errorf("err setup can not get unicast")
+	}
+
+	// record
+	if tx.Status() == status.ANNOUNCED || tx.Status() == status.PRERECORD {
+		ok = transports.Has("mode=record")
+		if !ok {
+			return fmt.Errorf("error setup can not get mode=record")
+		}
+		isUDP := transports.Has("RTP/AVP/UDP")
+		isTCP := transports.Has("RTP/AVP/TCP")
+		if isUDP == false && isTCP == false {
+			return fmt.Errorf("err setup can not get RTP/AVP/UDP or RTP/AVP/TCP")
+		}
+		// tcp
+		if isTCP {
+			interleaved := transports.Value("interleaved")
+			if interleaved == "" {
+				return fmt.Errorf("can not get interleaved")
+			}
+			// todo check the stream channel
+			res.SetHeader("Transport", strings.Join([]string{
+				"RTP/AVP/TCP",
+				"unicast",
+				fmt.Sprintf("interleaved=%s", interleaved),
+			}, ";"))
+			res.SetHeader("Session", "12345678")
+			tx.SetStatus(status.PRERECORD)
+			return nil
+		}
+		if isUDP {
+			return nil
+		}
+
+	}
+
+	return nil
+}
+
 func parseRoomId(p string) string {
 	return strings.TrimLeft(p, "/")
 }
