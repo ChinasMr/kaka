@@ -85,7 +85,7 @@ func (g *transport) SendResponse(res Response) error {
 	if !ok {
 		return fmt.Errorf("res is not a response")
 	}
-	return g.SendResponse(r)
+	return g.sendResponse(r)
 }
 
 func (g *transport) SetStatus(s status.Status) {
