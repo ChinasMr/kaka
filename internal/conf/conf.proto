@@ -17,7 +17,9 @@ message Server {
   message RTSP {
     string network = 1;
     string addr = 2;
-    google.protobuf.Duration timeout = 3;
+    string rtp = 3;
+    string rtcp = 4;
+    google.protobuf.Duration timeout = 5;
   }
   GRPC grpc = 1;
   RTSP rtsp = 2;
