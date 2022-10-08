@@ -14,9 +14,9 @@ import (
 
 import (
 	"github.com/ChinasMr/kaka/internal/conf"
-	"github.com/ChinasMr/kaka/pkg/app"
+	"github.com/ChinasMr/kaka/pkg/application"
 )
 
-func wireApp(*conf.Server, log.Logger) (*app.App, func(), error) {
+func wireApp(*conf.Server, log.Logger) (*application.App, func(), error) {
 	panic(wire.Build(newApp, server.ProviderSet, service.ProviderSet, biz.ProviderSet, data.ProviderSet))
 }
