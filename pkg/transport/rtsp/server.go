@@ -12,23 +12,29 @@ import (
 )
 
 type Server struct {
-	network string
-	address string
-	lis     net.Listener
-	err     error
-	timeout time.Duration
-	baseCtx context.Context
-
-	log     *log.Helper
-	handler Handler
-	serveWG sync.WaitGroup
-	mutex   sync.Mutex
+	network  string
+	address  string
+	rtp      string
+	rtcp     string
+	lis      net.Listener
+	conn     *net.UDPConn
+	rtpConn  *net.UDPConn
+	rtcpConn *net.UDPConn
+	err      error
+	timeout  time.Duration
+	baseCtx  context.Context
+	log      *log.Helper
+	handler  Handler
+	serveWG  sync.WaitGroup
+	mutex    sync.Mutex
 }
 
 func NewServer(opts ...ServerOption) *Server {
 	srv := &Server{
-		network: "tcp",
+		network: "*",
 		address: ":0",
+		rtp:     "30000",
+		rtcp:    ":30001",
 		mutex:   sync.Mutex{},
 		handler: &UnimplementedServerHandler{},
 	}
@@ -129,6 +135,8 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.baseCtx = ctx
 	log.Infof("[RTSP] server listening on: %s", s.lis.Addr().String())
+	log.Infof("[RTP ] server listening on: %s", s.rtpConn.LocalAddr())
+	log.Infof("[RTCP] server listening on: %s", s.rtcpConn.LocalAddr())
 	return s.serve(s.lis)
 }
 
@@ -139,22 +147,59 @@ func (s *Server) Stop(_ context.Context) error {
 }
 
 func (s *Server) listen() error {
-	if s.lis == nil {
-		lis, err := net.Listen(s.network, s.address)
+	if s.lis == nil && (s.network == "*" || s.network == "tcp") {
+		lis, err := net.Listen("tcp", s.address)
 		if err != nil {
 			s.err = err
 			return err
 		}
 		s.lis = lis
 	}
+
+	if s.conn == nil && (s.network == "*" || s.network == "udp") {
+		addr, err := net.ResolveUDPAddr("udp", s.address)
+		if err != nil {
+			s.err = err
+			return err
+		}
+		conn, err := net.ListenUDP("udp", addr)
+		if err != nil {
+			s.err = err
+			return err
+		}
+		s.conn = conn
+	}
+
+	addr, err := net.ResolveUDPAddr("udp", s.rtp)
+	if err != nil {
+		s.err = err
+		return err
+	}
+	conn, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		s.err = err
+		return err
+	}
+	s.rtpConn = conn
+	addr, err = net.ResolveUDPAddr("udp", s.rtcp)
+	if err != nil {
+		s.err = err
+		return err
+	}
+	conn, err = net.ListenUDP("udp", addr)
+	if err != nil {
+		s.err = err
+		return err
+	}
+	s.rtcpConn = conn
 	return s.err
 }
 
-func (s *Server) RegisterHandler(handler Handler) {
+func RegisterHandler(srv *Server, handler Handler) {
 	if handler == nil {
 		return
 	}
-	s.handler = handler
+	srv.handler = handler
 }
 
 func (s *Server) GracefulStop() {
