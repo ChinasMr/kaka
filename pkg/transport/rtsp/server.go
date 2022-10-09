@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"io"
 	"net"
 	"net/netip"
@@ -189,6 +190,9 @@ func (s *Server) handleRawConn(conn net.Conn) {
 		s.log.Debugf("%s request from %s", req.Method(), tc.Addr().String())
 		err = s.handleRequest(req, tc)
 		if err != nil {
+			if err == io.EOF {
+				return
+			}
 			s.log.Errorf("can not handle request: %v", err)
 		}
 	}
@@ -216,30 +220,50 @@ func (s *Server) handleRequest(req *request, trans Transport) error {
 		case method.ANNOUNCE:
 			s.handler.ANNOUNCE(req, res)
 		}
+		// auto send response.
 		return trans.SendResponse(res)
 	} else if req.method == method.SETUP {
-		// state functions.
 		// check state, buf every state can call the setup.
+		// get transports header.
 		transports, ok := req.Transport()
 		if !ok {
 			ErrUnsupportedTransport(res)
 			return trans.SendResponse(res)
 		}
+
+		// disabled multicast.
 		ok = transports.Has("unicast")
 		if !ok {
 			ErrUnsupportedTransport(res)
 			return trans.SendResponse(res)
 		}
 
-		sid := req.SessionID()
-		tx := s.txs.GetTx(sid)
-		err := s.handler.SETUP(req, res, tx)
-		if err != nil {
-			Err500(res)
+		// get tx
+		tx := s.txs.GetTx(req.SessionID())
+		// refresh the transport
+		tx.trans = trans
+		// handle request
+		return s.handler.SETUP(req, res, tx)
+	} else if req.method == method.RECORD {
+		tx := s.txs.GetTx(req.SessionID())
+		// state check
+		if tx.state != status.READY && tx.state != status.RECORDING {
+			ErrMethodNotValidINThisState(res)
 			return trans.SendResponse(res)
 		}
-		res.SetHeader("Session", tx.id)
-		return trans.SendResponse(res)
+		// refresh the transport
+		tx.trans = trans
+		// handle request
+		return s.handler.RECORD(req, res, tx)
+	} else if req.method == method.TEARDOWN {
+		tx := s.txs.GetTx(req.SessionID())
+		// state check, you can call teardown anytime.
+		return s.handler.TEARDOWN(req, res, tx)
+	} else if req.method == method.DOWN {
+		tx := s.txs.GetTx(req.SessionID())
+		// state check, you can call teardown anytime.
+		_ = s.handler.TEARDOWN(req, res, tx)
+		return io.EOF
 	} else {
 		ErrMethodNotAllowed(res)
 		return trans.SendResponse(res)

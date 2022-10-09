@@ -24,8 +24,6 @@ type Transport interface {
 	SendResponse(res Response) error
 	Addr() net.Addr
 	parseRequest() (*request, error)
-	ReadInterleavedFrame(frame []byte) (int, uint32, error)
-	WriteInterleavedFrame(channel int, frame []byte) error
 	Close() error
 }
 

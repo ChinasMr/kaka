@@ -10,6 +10,7 @@ import (
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/header"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"gortc.io/sdp"
+	"io"
 	"strings"
 )
 
@@ -27,7 +28,7 @@ func NewKakaService(logger log.Logger, useCase *biz.KakaUseCase) *KakaService {
 	}
 }
 
-func (s *KakaService) Debug(ctx context.Context, _ *pb.DebugRequest) (*pb.DebugReply, error) {
+func (s *KakaService) Debug(_ context.Context, _ *pb.DebugRequest) (*pb.DebugReply, error) {
 	s.log.Debugf("debug request incoming!")
 	return &pb.DebugReply{
 		Id:       "1",
@@ -68,10 +69,9 @@ func (s *KakaService) SETUP(req rtsp.Request, res rtsp.Response, tx rtsp.Transac
 	channel, err := s.uc.GetChannel(context.Background(), channelId)
 	if err != nil {
 		s.log.Errorf("can not get channel: %v", err)
-		return err
+		rtsp.Err404(res)
+		return tx.Transport().SendResponse(res)
 	}
-	s.log.Debugf("channel sdp: %+v", channel)
-	s.log.Debugf("path: %v, channel: %v", req.Path(), channelId)
 	// record
 	if record {
 		isUDP := transports.Has("RTP/AVP/UDP")
@@ -100,7 +100,15 @@ func (s *KakaService) SETUP(req rtsp.Request, res rtsp.Response, tx rtsp.Transac
 				"unicast",
 				fmt.Sprintf("interleaved=%s", interleaved),
 			}, ";"))
+			res.SetHeader("Session", tx.ID())
+			err1 := tx.Transport().SendResponse(res)
+			if err1 != nil {
+				return err1
+			}
+			// acknowledged response.
 			tx.AddMedia(interleaved)
+			tx.SetInterleaved()
+			s.log.Debugf("%s set interleaved stream: %s", req.URL().String(), interleaved)
 			return nil
 		}
 		if isUDP {
@@ -134,44 +142,55 @@ func (s *KakaService) SETUP(req rtsp.Request, res rtsp.Response, tx rtsp.Transac
 	return nil
 }
 
-//func (s *KakaService) RECORD(req rtsp.Request, res rtsp.Response, tx rtsp.Transport) error {
-//	s.log.Debugf("record request from: %s", tx.Addr().String())
-//	id := parseRoomId(req.Path())
-//	room, err := s.uc.GetRoom(context.Background(), id)
-//	if err != nil {
-//		return err
-//	}
-//
-//	res.SetHeader("Session", "12345678")
-//	err = tx.SendResponse(res)
-//	if err != nil {
-//		return err
-//	}
-//	s.log.Debugf("------- Room %s start recording from %s -------", id, tx.Addr().String())
-//	defer func() {
-//		room.Source = nil
-//		s.log.Debugf("------- Room %s ended recording from %s -------", id, tx.Addr().String())
-//	}()
-//	buf := make([]byte, 2048)
-//
-//	for {
-//		channel, frameLen, err1 := tx.ReadInterleavedFrame(buf)
-//		if err1 != nil {
-//
-//			if err1 == io.EOF {
-//				return nil
-//			}
-//			return err1
-//		}
-//		for _, terminal := range room.Terminals {
-//			if true {
-//				_ = terminal.WriteInterleavedFrame(channel, buf[:frameLen])
-//				s.log.Debugf("push stream to %s --------> %d bytes", terminal.Addr().String(), frameLen)
-//			}
-//		}
-//	}
-//
-//}
+func (s *KakaService) RECORD(req rtsp.Request, res rtsp.Response, tx rtsp.Transaction) error {
+	s.log.Debugf("record request: %s", req.URL().String())
+	channelId := parseChannelId(req.Path())
+	channel, err := s.uc.GetChannel(context.Background(), channelId)
+	if err != nil {
+		rtsp.Err404(res)
+		return tx.Transport().SendResponse(res)
+	}
+	res.SetHeader("Session", tx.ID())
+	err = tx.Transport().SendResponse(res)
+	if err != nil {
+		return err
+	}
+	tx.SetStatus(status.PLAYING)
+
+	// interleaved, the tpc connection for RTSP turns to RTP/RTCP.
+	if tx.Interleaved() {
+		tpcTrans, ok := tx.Transport().(*rtsp.TcpTransport)
+		if !ok {
+			return fmt.Errorf("interleaved tranports error")
+		}
+		s.log.Debugf("interleaved connect to %s", tpcTrans.Addr().String())
+		buf := make([]byte, 2048)
+		for {
+			_, n, err1 := tpcTrans.ReadInterleavedFrame(buf)
+			if err1 != nil {
+				if err1 == io.EOF {
+					s.log.Debugf("client close the interleaved connection")
+					return nil
+				}
+				return err
+			}
+			s.log.Debugf("read interleaved data: %d bytes", n)
+			channel.Input <- buf[:n]
+		}
+	}
+
+	return nil
+
+}
+
+func (s *KakaService) TEARDOWN(req rtsp.Request, res rtsp.Response, tx rtsp.Transaction) error {
+	s.log.Debugf("teardown/down request: %s", req.URL().String())
+	res.SetHeader("Session", tx.ID())
+	_ = tx.Transport().SendResponse(res)
+	// todo clear serve resources.
+	return nil
+}
+
 //
 //func (s *KakaService) DESCRIBE(req rtsp.Request, res rtsp.Response) {
 //	log.Debugf("describe request from: %s", req.URL().String())

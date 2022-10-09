@@ -9,10 +9,14 @@ import (
 var _ Transaction = (*transaction)(nil)
 
 type Transaction interface {
+	ID() string
 	Status() status.Status
 	SetStatus(s status.Status)
 	AddMedia(media string)
+	Interleaved() bool
+	SetInterleaved()
 	Medias() int
+	Transport() Transport
 }
 
 type TransactionOperator interface {
@@ -53,9 +57,27 @@ func (t *transactionOperator) DeleteTx(id string) {
 }
 
 type transaction struct {
-	id     string
-	state  status.Status
-	medias map[string]bool
+	id          string
+	state       status.Status
+	medias      map[string]bool
+	interleaved bool
+	trans       Transport
+}
+
+func (t *transaction) ID() string {
+	return t.id
+}
+
+func (t *transaction) Transport() Transport {
+	return t.trans
+}
+
+func (t *transaction) Interleaved() bool {
+	return t.interleaved
+}
+
+func (t *transaction) SetInterleaved() {
+	t.interleaved = true
 }
 
 func (t *transaction) SetStatus(s status.Status) {
@@ -77,8 +99,10 @@ func (t *transaction) Status() status.Status {
 func newTransaction() *transaction {
 	id, _ := uuid.NewUUID()
 	return &transaction{
-		id:     id.String(),
-		state:  status.INIT,
-		medias: map[string]bool{},
+		id:          id.String(),
+		state:       status.INIT,
+		medias:      map[string]bool{},
+		interleaved: false,
+		trans:       nil,
 	}
 }

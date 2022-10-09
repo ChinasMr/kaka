@@ -3,22 +3,22 @@ package biz
 import (
 	"context"
 	"github.com/ChinasMr/kaka/pkg/log"
-	"github.com/ChinasMr/kaka/pkg/transport/rtsp"
+	"github.com/google/uuid"
 	"gortc.io/sdp"
 	"sync"
 )
 
 type Channel struct {
 	Id        string
-	Source    *rtsp.Transaction
-	Terminals []*rtsp.Transaction
+	Terminals TerminalsOperator
 	SDP       *sdp.Message
 	RawSDP    []byte
 	mu        sync.Mutex
+	Input     chan []byte
 }
 
 type ChannelRepo interface {
-	Create(ctx context.Context) (*Channel, error)
+	Create(ctx context.Context, id string) (*Channel, error)
 	Get(ctx context.Context, id string) (*Channel, error)
 	Delete(ctx context.Context, id string) error
 }
@@ -33,6 +33,14 @@ func NewKakaUseCase(logger log.Logger, repo ChannelRepo) *KakaUseCase {
 		log:     log.NewHelper(logger),
 		channel: repo,
 	}
+}
+
+func (uc *KakaUseCase) CreateChannel(ctx context.Context) (*Channel, error) {
+	id, err := uuid.NewUUID()
+	if err != nil {
+		return nil, err
+	}
+	return uc.channel.Create(ctx, id.String())
 }
 
 func (uc *KakaUseCase) GetChannel(ctx context.Context, id string) (*Channel, error) {

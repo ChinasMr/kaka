@@ -15,4 +15,5 @@ const (
 	TEARDOWN Method = "TEARDOWN"
 	PLAY     Method = "PLAY"
 	PAUSE    Method = "PAUSE"
+	DOWN     Method = "DOWN"
 )

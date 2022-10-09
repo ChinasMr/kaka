@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"github.com/ChinasMr/kaka/internal/biz"
 	"github.com/ChinasMr/kaka/pkg/log"
-	"github.com/ChinasMr/kaka/pkg/transport/rtsp"
-	"github.com/google/uuid"
 	"sync"
 )
 
@@ -35,17 +33,14 @@ func (r *channelRepo) Delete(_ context.Context, id string) error {
 	return nil
 }
 
-func (r *channelRepo) Create(_ context.Context) (*biz.Channel, error) {
-	id, err := uuid.NewUUID()
-	if err != nil {
-		return nil, err
-	}
+func (r *channelRepo) Create(_ context.Context, id string) (*biz.Channel, error) {
+	ch := make(chan []byte)
 	nc := &biz.Channel{
-		Id:        id.String(),
-		Source:    nil,
-		Terminals: []*rtsp.Transaction{},
+		Id:        id,
+		Terminals: biz.NewTerminalsOperator(ch),
 		SDP:       nil,
 		RawSDP:    nil,
+		Input:     ch,
 	}
 	r.rwm.Lock()
 	r.channels[nc.Id] = nc
@@ -54,11 +49,11 @@ func (r *channelRepo) Create(_ context.Context) (*biz.Channel, error) {
 }
 
 func NewChannelRepo(logger log.Logger) biz.ChannelRepo {
-	return &channelRepo{
-		log: log.NewHelper(logger),
-		channels: map[string]*biz.Channel{
-			defaultChannel: {Id: defaultChannel},
-		},
-		rwm: sync.RWMutex{},
+	rp := &channelRepo{
+		log:      log.NewHelper(logger),
+		channels: map[string]*biz.Channel{},
+		rwm:      sync.RWMutex{},
 	}
+	_, _ = rp.Create(context.Background(), defaultChannel)
+	return rp
 }

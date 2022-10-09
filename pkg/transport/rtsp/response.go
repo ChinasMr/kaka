@@ -29,6 +29,11 @@ func ErrMethodNotAllowed(res Response) {
 	res.SetCode(405)
 }
 
+func ErrMethodNotValidINThisState(res Response) {
+	res.SetStatus("Method Not Valid in This State")
+	res.SetCode(455)
+}
+
 type response struct {
 	proto   string
 	code    uint64
