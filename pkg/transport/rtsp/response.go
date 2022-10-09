@@ -14,6 +14,11 @@ func Err404(res Response) {
 	res.SetCode(404)
 }
 
+func Err500(res Response) {
+	res.SetStatus("Internal Server Error")
+	res.SetCode(500)
+}
+
 func ErrMethodNotAllowed(res Response) {
 	res.SetStatus("Method Not Allowed")
 	res.SetCode(405)

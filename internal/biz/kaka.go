@@ -2,64 +2,52 @@ package biz
 
 import (
 	"context"
-	"fmt"
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp"
-	"github.com/google/uuid"
 	"gortc.io/sdp"
 	"sync"
 )
 
-type Room struct {
+type Channel struct {
 	Id        string
-	Source    rtsp.Transport
-	Terminals []rtsp.Transport
+	Source    *rtsp.Transaction
+	Terminals []*rtsp.Transaction
 	SDP       *sdp.Message
-	SDPRaw    []byte
+	RawSDP    []byte
 	mu        sync.Mutex
 }
 
-type RoomRepo interface {
-	Create(ctx context.Context, room *Room) (*Room, error)
-	Get(ctx context.Context, id string) (*Room, error)
+type ChannelRepo interface {
+	Create(ctx context.Context) (*Channel, error)
+	Get(ctx context.Context, id string) (*Channel, error)
 	Delete(ctx context.Context, id string) error
-	SetRoomInput(ctx context.Context, id string, room *Room) error
 }
 
 type KakaUseCase struct {
-	log  *log.Helper
-	room RoomRepo
+	log     *log.Helper
+	channel ChannelRepo
 }
 
-func NewKakaUseCase(logger log.Logger, repo RoomRepo) *KakaUseCase {
+func NewKakaUseCase(logger log.Logger, repo ChannelRepo) *KakaUseCase {
 	return &KakaUseCase{
-		log:  log.NewHelper(logger),
-		room: repo,
+		log:     log.NewHelper(logger),
+		channel: repo,
 	}
 }
 
-func (uc *KakaUseCase) CreateRoom(ctx context.Context, room *Room) (*Room, error) {
-	id, err := uuid.NewUUID()
-	if err != nil {
-		return nil, err
-	}
-	nr := &Room{
-		Id: id.String(),
-	}
-	return uc.room.Create(ctx, nr)
+func (uc *KakaUseCase) GetChannel(ctx context.Context, id string) (*Channel, error) {
+	return uc.channel.Get(ctx, id)
 }
 
-func (uc *KakaUseCase) GetRoom(ctx context.Context, id string) (*Room, error) {
-	return uc.room.Get(ctx, id)
-}
-
-func (uc *KakaUseCase) SetRoomInput(ctx context.Context, id string, room *Room) error {
-	p, err := uc.room.Get(ctx, id)
+func (uc *KakaUseCase) SetChannelPresentationDescription(ctx context.Context, id string, sdp *sdp.Message, raw []byte) error {
+	p, err := uc.channel.Get(ctx, id)
 	if err != nil {
 		return err
 	}
-	if p.Source != nil {
-		return fmt.Errorf("this room already has a source")
-	}
-	return uc.room.SetRoomInput(ctx, id, room)
+	// todo check the source state.
+	p.mu.Lock()
+	p.SDP = sdp
+	p.RawSDP = raw
+	p.mu.Unlock()
+	return nil
 }

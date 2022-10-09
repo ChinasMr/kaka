@@ -19,8 +19,8 @@ import (
 // Injectors from wire.go:
 
 func wireApp(confServer *conf.Server, logger log.Logger) (*application.App, func(), error) {
-	roomRepo := data.NewRoomRepo(logger)
-	kakaUseCase := biz.NewKakaUseCase(logger, roomRepo)
+	channelRepo := data.NewChannelRepo(logger)
+	kakaUseCase := biz.NewKakaUseCase(logger, channelRepo)
 	kakaService := service.NewKakaService(logger, kakaUseCase)
 	grpcServer := server.NewGRPCServer(confServer, kakaService)
 	rtspServer := server.NewRTSPServer(confServer, kakaService, logger)

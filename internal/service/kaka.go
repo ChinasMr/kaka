@@ -7,8 +7,8 @@ import (
 	"github.com/ChinasMr/kaka/internal/biz"
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/header"
 	"gortc.io/sdp"
-	"io"
 	"strings"
 )
 
@@ -38,18 +38,25 @@ func (s *KakaService) Debug(ctx context.Context, _ *pb.DebugRequest) (*pb.DebugR
 
 func (s *KakaService) ANNOUNCE(req rtsp.Request, res rtsp.Response) {
 	s.log.Debugf("announce request from %s", req.URL().String())
+	if req.ContentType() != header.ContentTypeSDP {
+		s.log.Errorf("unsupported presentation description format")
+		rtsp.Err500(res)
+		return
+	}
 	message, err := decodeSDP(req.Body())
 	if err != nil {
 		s.log.Errorf("can not decode sdp: %v", err)
-		rtsp.Err404(res)
+		rtsp.Err500(res)
 		return
 	}
-	id := parseRoomId(req.Path())
-	err = s.uc.SetRoomInput(context.Background(), id, &biz.Room{
-		Terminals: nil,
-		SDP:       message,
-		SDPRaw:    req.Body(),
-	})
+	id := parseChannelId(req.Path())
+
+	err = s.uc.SetChannelPresentationDescription(context.Background(), id, message, req.Body())
+	if err != nil {
+		s.log.Errorf("can not set channel presentation description: %v", err)
+		rtsp.Err500(res)
+		return
+	}
 }
 
 func (s *KakaService) SETUP(req rtsp.Request, res rtsp.Response, tx rtsp.Transport) error {
@@ -120,92 +127,97 @@ func (s *KakaService) SETUP(req rtsp.Request, res rtsp.Response, tx rtsp.Transpo
 	return fmt.Errorf("status error")
 }
 
-func (s *KakaService) RECORD(req rtsp.Request, res rtsp.Response, tx rtsp.Transport) error {
-	s.log.Debugf("record request from: %s", tx.Addr().String())
-	id := parseRoomId(req.Path())
-	room, err := s.uc.GetRoom(context.Background(), id)
-	if err != nil {
-		return err
+//func (s *KakaService) RECORD(req rtsp.Request, res rtsp.Response, tx rtsp.Transport) error {
+//	s.log.Debugf("record request from: %s", tx.Addr().String())
+//	id := parseRoomId(req.Path())
+//	room, err := s.uc.GetRoom(context.Background(), id)
+//	if err != nil {
+//		return err
+//	}
+//
+//	res.SetHeader("Session", "12345678")
+//	err = tx.SendResponse(res)
+//	if err != nil {
+//		return err
+//	}
+//	s.log.Debugf("------- Room %s start recording from %s -------", id, tx.Addr().String())
+//	defer func() {
+//		room.Source = nil
+//		s.log.Debugf("------- Room %s ended recording from %s -------", id, tx.Addr().String())
+//	}()
+//	buf := make([]byte, 2048)
+//
+//	for {
+//		channel, frameLen, err1 := tx.ReadInterleavedFrame(buf)
+//		if err1 != nil {
+//
+//			if err1 == io.EOF {
+//				return nil
+//			}
+//			return err1
+//		}
+//		for _, terminal := range room.Terminals {
+//			if true {
+//				_ = terminal.WriteInterleavedFrame(channel, buf[:frameLen])
+//				s.log.Debugf("push stream to %s --------> %d bytes", terminal.Addr().String(), frameLen)
+//			}
+//		}
+//	}
+//
+//}
+//
+//func (s *KakaService) DESCRIBE(req rtsp.Request, res rtsp.Response) {
+//	log.Debugf("describe request from: %s", req.URL().String())
+//	id := parseRoomId(req.Path())
+//	room, err := s.uc.GetRoom(context.Background(), id)
+//	if err != nil {
+//		return
+//	}
+//	if room.Source == nil {
+//		return
+//	}
+//
+//	res.SetHeader("Content-Base", req.URL().String())
+//	res.SetHeader("Content-Type", "application/sdp")
+//	res.SetBody(room.SDPRaw)
+//
+//}
+//
+//func (s *KakaService) PLAY(req rtsp.Request, res rtsp.Response, tx rtsp.Transport) error {
+//	log.Debugf("play request from: %s", tx.Addr().String())
+//	id := parseRoomId(req.Path())
+//	room, err := s.uc.GetRoom(context.Background(), id)
+//	if err != nil {
+//		return err
+//	}
+//
+//	// todo check the channel setup process.
+//	res.SetHeader("Session", "12345678")
+//	err = tx.SendResponse(res)
+//	if err != nil {
+//		return err
+//	}
+//	room.Terminals = append(room.Terminals, tx)
+//	//buf := make([]byte, 2048)
+//	//for {
+//	//	_, err1 := tx.RawConn().Read(buf)
+//	//	if err1 != nil {
+//	//		if err == io.EOF {
+//	//			return nil
+//	//		}
+//	//		return err1
+//	//	}
+//	//}
+//	return nil
+//}
+
+func parseChannelId(p string) string {
+	str := strings.TrimLeft(p, "/")
+	index := strings.Index(str, "/")
+	if index != -1 {
+		return str[:index]
 	}
-
-	res.SetHeader("Session", "12345678")
-	err = tx.SendResponse(res)
-	if err != nil {
-		return err
-	}
-	s.log.Debugf("------- Room %s start recording from %s -------", id, tx.Addr().String())
-	defer func() {
-		room.Source = nil
-		s.log.Debugf("------- Room %s ended recording from %s -------", id, tx.Addr().String())
-	}()
-	buf := make([]byte, 2048)
-
-	for {
-		channel, frameLen, err1 := tx.ReadInterleavedFrame(buf)
-		if err1 != nil {
-
-			if err1 == io.EOF {
-				return nil
-			}
-			return err1
-		}
-		for _, terminal := range room.Terminals {
-			if true {
-				_ = terminal.WriteInterleavedFrame(channel, buf[:frameLen])
-				s.log.Debugf("push stream to %s --------> %d bytes", terminal.Addr().String(), frameLen)
-			}
-		}
-	}
-
-}
-
-func (s *KakaService) DESCRIBE(req rtsp.Request, res rtsp.Response) {
-	log.Debugf("describe request from: %s", req.URL().String())
-	id := parseRoomId(req.Path())
-	room, err := s.uc.GetRoom(context.Background(), id)
-	if err != nil {
-		return
-	}
-	if room.Source == nil {
-		return
-	}
-
-	res.SetHeader("Content-Base", req.URL().String())
-	res.SetHeader("Content-Type", "application/sdp")
-	res.SetBody(room.SDPRaw)
-
-}
-
-func (s *KakaService) PLAY(req rtsp.Request, res rtsp.Response, tx rtsp.Transport) error {
-	log.Debugf("play request from: %s", tx.Addr().String())
-	id := parseRoomId(req.Path())
-	room, err := s.uc.GetRoom(context.Background(), id)
-	if err != nil {
-		return err
-	}
-
-	// todo check the channel setup process.
-	res.SetHeader("Session", "12345678")
-	err = tx.SendResponse(res)
-	if err != nil {
-		return err
-	}
-	room.Terminals = append(room.Terminals, tx)
-	//buf := make([]byte, 2048)
-	//for {
-	//	_, err1 := tx.RawConn().Read(buf)
-	//	if err1 != nil {
-	//		if err == io.EOF {
-	//			return nil
-	//		}
-	//		return err1
-	//	}
-	//}
-	return nil
-}
-
-func parseRoomId(p string) string {
-	return strings.TrimLeft(p, "/")
+	return str
 }
 
 func decodeSDP(content []byte) (*sdp.Message, error) {

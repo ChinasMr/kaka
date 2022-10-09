@@ -3,7 +3,6 @@ package rtsp
 import (
 	"context"
 	"github.com/ChinasMr/kaka/pkg/log"
-	"github.com/ChinasMr/kaka/pkg/transport/rtsp/header"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
 	"io"
 	"net"
@@ -186,8 +185,11 @@ func (s *Server) handleRawConn(conn net.Conn) {
 			s.log.Errorf("can not parse rtsp request: %v", err)
 			return
 		}
+		s.log.Debugf("%s request from %s", req.Method(), tc.Addr().String())
 		err = s.handleRequest(req, tc)
-		s.log.Errorf("can not handle request: %v", err)
+		if err != nil {
+			s.log.Errorf("can not handle request: %v", err)
+		}
 	}
 }
 
@@ -197,7 +199,7 @@ func (s *Server) handleRequest(req *request, trans Transport) error {
 	)
 	// check presentation description or media path.
 	if len(req.Path()) <= 1 {
-		Err404(res)
+		Err500(res)
 		return trans.SendResponse(res)
 	}
 
@@ -207,22 +209,18 @@ func (s *Server) handleRequest(req *request, trans Transport) error {
 		req.method == method.ANNOUNCE {
 		switch req.Method() {
 		case method.OPTIONS:
-			// no check
 			s.handler.OPTIONS(req, res)
 		case method.DESCRIBE:
-			// no check
 			s.handler.DESCRIBE(req, res)
 		case method.ANNOUNCE:
-			// content-type
-			if req.ContentType() != header.ContentTypeSDP {
-				Err404(res)
-				break
-			}
 			s.handler.ANNOUNCE(req, res)
 		}
 		return trans.SendResponse(res)
 	} else if req.method == method.SETUP {
 		// state functions.
+		//sid := req.SessionID()
+		//tx := s.txs.GetTx(sid)
+
 		return trans.SendResponse(res)
 	} else {
 		ErrMethodNotAllowed(res)
