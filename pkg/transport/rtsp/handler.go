@@ -1,10 +1,23 @@
 package rtsp
 
+import (
+	"github.com/ChinasMr/kaka/pkg/log"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/header"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
+	"strings"
+)
+
+// Many methods in RTSP do not contribute to state.
+// However, the following play a central role in defining
+// the allocation and usage of stream resources on the server:
+// SETUP, PLAY, RECORD, PAUSE, and TEARDOWN.
+
 type Handler interface {
-	OPTIONS(req Request, res Response, tx Transport) error
-	DESCRIBE(req Request, res Response, tx Transport) error
+	OPTIONS(req Request, res Response)
+	DESCRIBE(req Request, res Response)
+	ANNOUNCE(req Request, res Response)
+
 	SETUP(req Request, res Response, tx Transport) error
-	ANNOUNCE(req Request, res Response, tx Transport) error
 	RECORD(req Request, res Response, tx Transport) error
 	PLAY(req Request, res Response, tx Transport) error
 	TEARDOWN(req Request, res Response, tx Transport) error
@@ -13,22 +26,28 @@ type Handler interface {
 var _ Handler = (*UnimplementedServerHandler)(nil)
 
 type UnimplementedServerHandler struct {
-	sdp []byte
 }
 
-func (u *UnimplementedServerHandler) PLAY(req Request, res Response, tx Transport) error {
+func (u *UnimplementedServerHandler) OPTIONS(req Request, res Response) {
+	log.Debugf("options request from: %s", req.URL().String())
+	methods := strings.Join([]string{
+		method.DESCRIBE.String(),
+		method.ANNOUNCE.String(),
+		method.SETUP.String(),
+		method.PLAY.String(),
+		method.PAUSE.String(),
+		method.RECORD.String(),
+		method.TEARDOWN.String(),
+	}, ", ")
+	res.SetHeader(header.Public, methods)
+	return
+}
+
+func (u *UnimplementedServerHandler) ANNOUNCE(req Request, res Response) {
 	panic("implement me")
 }
 
-func (u *UnimplementedServerHandler) TEARDOWN(req Request, res Response, tx Transport) error {
-	panic("implement me")
-}
-
-func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transport) error {
-	panic("implement me")
-}
-
-func (u *UnimplementedServerHandler) ANNOUNCE(req Request, res Response, tx Transport) error {
+func (u *UnimplementedServerHandler) DESCRIBE(req Request, res Response) {
 	panic("implement me")
 }
 
@@ -36,10 +55,14 @@ func (u *UnimplementedServerHandler) SETUP(req Request, res Response, tx Transpo
 	panic("implement me")
 }
 
-func (u *UnimplementedServerHandler) DESCRIBE(req Request, res Response, tx Transport) error {
+func (u *UnimplementedServerHandler) PLAY(req Request, res Response, tx Transport) error {
 	panic("implement me")
 }
 
-func (u *UnimplementedServerHandler) OPTIONS(_ Request, _ Response, _ Transport) error {
+func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transport) error {
+	panic("implement me")
+}
+
+func (u *UnimplementedServerHandler) TEARDOWN(req Request, res Response, tx Transport) error {
 	panic("implement me")
 }

@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	method2 "github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
-	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"io"
 	"net"
 	"net/textproto"
@@ -17,26 +16,29 @@ import (
 	"sync"
 )
 
-var _ Transport = (*transport)(nil)
+const Version1 = "RTSP/1.0"
+
+var _ Transport = (*TcpTransport)(nil)
 
 type Transport interface {
 	SendResponse(res Response) error
 	Addr() net.Addr
-	RawConn() net.Conn
-	Status() status.Status
-	SetStatus(s status.Status)
+	parseRequest() (*request, error)
 	ReadInterleavedFrame(frame []byte) (int, uint32, error)
 	WriteInterleavedFrame(channel int, frame []byte) error
 	Close() error
 }
 
-type transport struct {
-	conn   net.Conn
-	status status.Status
-	rwm    sync.RWMutex
+type TcpTransport struct {
+	conn net.Conn
 }
 
-func (g *transport) WriteInterleavedFrame(channel int, frame []byte) error {
+func NewTcpTransport(conn net.Conn) *TcpTransport {
+	return &TcpTransport{
+		conn: conn}
+}
+
+func (g *TcpTransport) WriteInterleavedFrame(channel int, frame []byte) error {
 	buf := make([]byte, 2048)
 	buf[0] = 0x24
 	buf[1] = byte(channel)
@@ -46,10 +48,7 @@ func (g *transport) WriteInterleavedFrame(channel int, frame []byte) error {
 	return err
 }
 
-func (g *transport) ReadInterleavedFrame(frame []byte) (int, uint32, error) {
-	if g.Status() != status.RECORD {
-		return -1, 0, fmt.Errorf("status error")
-	}
+func (g *TcpTransport) ReadInterleavedFrame(frame []byte) (int, uint32, error) {
 
 	// interleavedHeader example
 	// Magic:0x24   bytes 1
@@ -80,7 +79,7 @@ func (g *transport) ReadInterleavedFrame(frame []byte) (int, uint32, error) {
 	return int(interleavedHeader[1]), uint32(frameLen), nil
 }
 
-func (g *transport) SendResponse(res Response) error {
+func (g *TcpTransport) SendResponse(res Response) error {
 	r, ok := res.(*response)
 	if !ok {
 		return fmt.Errorf("res is not a response")
@@ -88,26 +87,7 @@ func (g *transport) SendResponse(res Response) error {
 	return g.sendResponse(r)
 }
 
-func (g *transport) SetStatus(s status.Status) {
-	g.rwm.Lock()
-	defer g.rwm.Unlock()
-	g.status = s
-}
-
-func NewTransport(conn net.Conn) *transport {
-	return &transport{
-		conn:   conn,
-		status: status.STARTING,
-	}
-}
-
-func (g *transport) Status() status.Status {
-	g.rwm.RLock()
-	g.rwm.RUnlock()
-	return g.status
-}
-
-func (g *transport) RawConn() net.Conn {
+func (g *TcpTransport) RawConn() net.Conn {
 	return g.conn
 }
 
@@ -126,10 +106,9 @@ func putTextProtoReader(r *textproto.Reader) {
 	readerPool.Put(r)
 }
 
-func (g *transport) parseRequest() (*request, error) {
+func (g *TcpTransport) parseRequest() (*request, error) {
 	br := bufio.NewReader(g.conn)
 	tp := newTextProtoReader(br)
-
 	var s string
 	var err error
 	if s, err = tp.ReadLine(); err != nil {
@@ -145,7 +124,7 @@ func (g *transport) parseRequest() (*request, error) {
 		return nil, fmt.Errorf("malformed RTSP request: %s", s)
 	}
 
-	if proto != "RTSP/1.0" {
+	if proto != Version1 {
 		return nil, fmt.Errorf("unsupported rtsp version: %s", method)
 	}
 
@@ -185,7 +164,6 @@ func (g *transport) parseRequest() (*request, error) {
 	req := &request{
 		method:  method2.Method(method),
 		url:     urlParsed,
-		path:    urlParsed.Path,
 		headers: mimeHeader,
 		body:    body,
 		cSeq:    cSeq[0],
@@ -204,10 +182,10 @@ func parseRequestLine(line string) (string, string, string, bool) {
 	return method, requestURI, proto, true
 }
 
-func (g *transport) sendResponse(res *response) error {
+func (g *TcpTransport) sendResponse(res *response) error {
 	buf := bytes.Buffer{}
 	buf.WriteString(fmt.Sprintf("%s %s %s\r\n",
-		res.proto, strconv.FormatUint(res.statusCode, 10), res.status))
+		res.proto, strconv.FormatUint(res.code, 10), res.status))
 	cl := uint64(len(res.body))
 	if cl > 0 {
 		res.SetHeader("Content-Length", strconv.FormatUint(cl, 10))
@@ -232,10 +210,10 @@ func (g *transport) sendResponse(res *response) error {
 	return err
 }
 
-func (g *transport) Addr() net.Addr {
+func (g *TcpTransport) Addr() net.Addr {
 	return g.conn.RemoteAddr()
 }
 
-func (g *transport) Close() error {
+func (g *TcpTransport) Close() error {
 	return g.conn.Close()
 }
