@@ -6,24 +6,33 @@ import (
 	"sync"
 )
 
+var _ Transaction = (*transaction)(nil)
+
+type Transaction interface {
+	Status() status.Status
+	SetStatus(s status.Status)
+	AddMedia(media string)
+	Medias() int
+}
+
 type TransactionOperator interface {
-	GetTx(id string) *Transaction
+	GetTx(id string) *transaction
 	DeleteTx(id string)
 }
 
 type transactionOperator struct {
-	txs map[string]*Transaction
+	txs map[string]*transaction
 	rwm sync.RWMutex
 }
 
 func NewTxOperator() TransactionOperator {
 	return &transactionOperator{
-		txs: map[string]*Transaction{},
+		txs: map[string]*transaction{},
 		rwm: sync.RWMutex{},
 	}
 }
 
-func (t *transactionOperator) GetTx(id string) *Transaction {
+func (t *transactionOperator) GetTx(id string) *transaction {
 	t.rwm.RLock()
 	tx, ok := t.txs[id]
 	t.rwm.RUnlock()
@@ -32,7 +41,7 @@ func (t *transactionOperator) GetTx(id string) *Transaction {
 	}
 	tx = newTransaction()
 	t.rwm.Lock()
-	t.txs[tx.Id] = tx
+	t.txs[tx.id] = tx
 	t.rwm.Unlock()
 	return tx
 }
@@ -43,17 +52,33 @@ func (t *transactionOperator) DeleteTx(id string) {
 	delete(t.txs, id)
 }
 
-type Transaction struct {
-	Id    string
-	State status.Status
-	Mu    sync.Mutex
+type transaction struct {
+	id     string
+	state  status.Status
+	medias map[string]bool
 }
 
-func newTransaction() *Transaction {
+func (t *transaction) SetStatus(s status.Status) {
+	t.state = s
+}
+
+func (t *transaction) Medias() int {
+	return len(t.medias)
+}
+
+func (t *transaction) AddMedia(media string) {
+	t.medias[media] = true
+}
+
+func (t *transaction) Status() status.Status {
+	return t.state
+}
+
+func newTransaction() *transaction {
 	id, _ := uuid.NewUUID()
-	return &Transaction{
-		Id:    id.String(),
-		State: status.INIT,
-		Mu:    sync.Mutex{},
+	return &transaction{
+		id:     id.String(),
+		state:  status.INIT,
+		medias: map[string]bool{},
 	}
 }

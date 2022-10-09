@@ -8,6 +8,7 @@ import (
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/header"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"gortc.io/sdp"
 	"strings"
 )
@@ -59,33 +60,39 @@ func (s *KakaService) ANNOUNCE(req rtsp.Request, res rtsp.Response) {
 	}
 }
 
-func (s *KakaService) SETUP(req rtsp.Request, res rtsp.Response, tx rtsp.Transport) error {
-	s.log.Debugf("setup request from: %+v", tx.Addr().String())
-	transports, ok := req.Transport()
-	if !ok {
-		return fmt.Errorf("err setup can not get transport")
+func (s *KakaService) SETUP(req rtsp.Request, res rtsp.Response, tx rtsp.Transaction) error {
+	s.log.Debugf("setup request: %+v", req.URL().String())
+	transports, _ := req.Transport()
+	record := transports.Has("mode=record")
+	channelId := parseChannelId(req.Path())
+	channel, err := s.uc.GetChannel(context.Background(), channelId)
+	if err != nil {
+		s.log.Errorf("can not get channel: %v", err)
+		return err
 	}
-	ok = transports.Has("unicast")
-	if !ok {
-		return fmt.Errorf("err setup can not get unicast")
-	}
-
+	s.log.Debugf("channel sdp: %+v", channel)
+	s.log.Debugf("path: %v, channel: %v", req.Path(), channelId)
 	// record
-	if true {
-		ok = transports.Has("mode=record")
-		if !ok {
-			return fmt.Errorf("error setup can not get mode=record")
-		}
+	if record {
 		isUDP := transports.Has("RTP/AVP/UDP")
 		isTCP := transports.Has("RTP/AVP/TCP")
 		if isUDP == false && isTCP == false {
-			return fmt.Errorf("err setup can not get RTP/AVP/UDP or RTP/AVP/TCP")
+			s.log.Errorf("err setup can not get RTP/AVP/UDP or RTP/AVP/TCP")
+			rtsp.ErrUnsupportedTransport(res)
+			return nil
 		}
+		defer func() {
+			if tx.Medias() >= len(channel.SDP.Medias) {
+				tx.SetStatus(status.READY)
+			}
+		}()
 		// tcp
 		if isTCP {
 			interleaved := transports.Value("interleaved")
 			if interleaved == "" {
-				return fmt.Errorf("can not get interleaved")
+				s.log.Errorf("can not get interleaved")
+				rtsp.ErrUnsupportedTransport(res)
+				return nil
 			}
 			// todo check the stream channel
 			res.SetHeader("Transport", strings.Join([]string{
@@ -93,7 +100,7 @@ func (s *KakaService) SETUP(req rtsp.Request, res rtsp.Response, tx rtsp.Transpo
 				"unicast",
 				fmt.Sprintf("interleaved=%s", interleaved),
 			}, ";"))
-			res.SetHeader("Session", "12345678")
+			tx.AddMedia(interleaved)
 			return nil
 		}
 		if isUDP {
@@ -102,29 +109,29 @@ func (s *KakaService) SETUP(req rtsp.Request, res rtsp.Response, tx rtsp.Transpo
 
 	}
 
-	// play
-	if true {
-		isTCP := transports.Has("RTP/AVP/TCP")
-		if isTCP == false {
-			return fmt.Errorf("can not get transport info")
-		}
-		if isTCP {
-			interleaved := transports.Value("interleaved")
-			if interleaved == "" {
-				return fmt.Errorf("can not get interleaved")
-			}
-			// todo check the stream channel
-			res.SetHeader("Transport", strings.Join([]string{
-				"RTP/AVP/TCP",
-				"unicast",
-				fmt.Sprintf("interleaved=%s", interleaved),
-			}, ";"))
-			res.SetHeader("Session", "12345678")
-			return nil
-		}
-	}
+	//// play
+	//if !record {
+	//	isTCP := transports.Has("RTP/AVP/TCP")
+	//	if isTCP == false {
+	//		return fmt.Errorf("can not get transport info")
+	//	}
+	//	if isTCP {
+	//		interleaved := transports.Value("interleaved")
+	//		if interleaved == "" {
+	//			return fmt.Errorf("can not get interleaved")
+	//		}
+	//		// todo check the stream channel
+	//		res.SetHeader("Transport", strings.Join([]string{
+	//			"RTP/AVP/TCP",
+	//			"unicast",
+	//			fmt.Sprintf("interleaved=%s", interleaved),
+	//		}, ";"))
+	//		res.SetHeader("Session", "12345678")
+	//		return nil
+	//	}
+	//}
 
-	return fmt.Errorf("status error")
+	return nil
 }
 
 //func (s *KakaService) RECORD(req rtsp.Request, res rtsp.Response, tx rtsp.Transport) error {

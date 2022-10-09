@@ -17,10 +17,10 @@ type Handler interface {
 	DESCRIBE(req Request, res Response)
 	ANNOUNCE(req Request, res Response)
 
-	SETUP(req Request, res Response, tx Transport) error
-	RECORD(req Request, res Response, tx Transport) error
-	PLAY(req Request, res Response, tx Transport) error
-	TEARDOWN(req Request, res Response, tx Transport) error
+	SETUP(req Request, res Response, tx Transaction) error
+	RECORD(req Request, res Response, tx Transaction) error
+	PLAY(req Request, res Response, tx Transaction) error
+	TEARDOWN(req Request, res Response, tx Transaction) error
 }
 
 var _ Handler = (*UnimplementedServerHandler)(nil)
@@ -51,18 +51,18 @@ func (u *UnimplementedServerHandler) DESCRIBE(req Request, res Response) {
 	panic("implement me")
 }
 
-func (u *UnimplementedServerHandler) SETUP(req Request, res Response, tx Transport) error {
+func (u *UnimplementedServerHandler) SETUP(req Request, res Response, tx Transaction) error {
 	panic("implement me")
 }
 
-func (u *UnimplementedServerHandler) PLAY(req Request, res Response, tx Transport) error {
+func (u *UnimplementedServerHandler) PLAY(req Request, res Response, tx Transaction) error {
 	panic("implement me")
 }
 
-func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transport) error {
+func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transaction) error {
 	panic("implement me")
 }
 
-func (u *UnimplementedServerHandler) TEARDOWN(req Request, res Response, tx Transport) error {
+func (u *UnimplementedServerHandler) TEARDOWN(req Request, res Response, tx Transaction) error {
 	panic("implement me")
 }

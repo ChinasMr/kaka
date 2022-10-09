@@ -19,6 +19,11 @@ func Err500(res Response) {
 	res.SetCode(500)
 }
 
+func ErrUnsupportedTransport(res Response) {
+	res.SetStatus("Unsupported Transport")
+	res.SetCode(461)
+}
+
 func ErrMethodNotAllowed(res Response) {
 	res.SetStatus("Method Not Allowed")
 	res.SetCode(405)

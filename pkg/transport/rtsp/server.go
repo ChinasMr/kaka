@@ -185,6 +185,7 @@ func (s *Server) handleRawConn(conn net.Conn) {
 			s.log.Errorf("can not parse rtsp request: %v", err)
 			return
 		}
+		// todo remove the log print.
 		s.log.Debugf("%s request from %s", req.Method(), tc.Addr().String())
 		err = s.handleRequest(req, tc)
 		if err != nil {
@@ -218,9 +219,26 @@ func (s *Server) handleRequest(req *request, trans Transport) error {
 		return trans.SendResponse(res)
 	} else if req.method == method.SETUP {
 		// state functions.
-		//sid := req.SessionID()
-		//tx := s.txs.GetTx(sid)
+		// check state, buf every state can call the setup.
+		transports, ok := req.Transport()
+		if !ok {
+			ErrUnsupportedTransport(res)
+			return trans.SendResponse(res)
+		}
+		ok = transports.Has("unicast")
+		if !ok {
+			ErrUnsupportedTransport(res)
+			return trans.SendResponse(res)
+		}
 
+		sid := req.SessionID()
+		tx := s.txs.GetTx(sid)
+		err := s.handler.SETUP(req, res, tx)
+		if err != nil {
+			Err500(res)
+			return trans.SendResponse(res)
+		}
+		res.SetHeader("Session", tx.id)
 		return trans.SendResponse(res)
 	} else {
 		ErrMethodNotAllowed(res)
