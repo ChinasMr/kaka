@@ -4,4 +4,6 @@ server:
     timeout: 10s
   rtsp:
     addr: 0.0.0.0:9001
+    rtp: 0.0.0.0:9002
+    rtcp: 0.0.0.0:9003
     timeout: 10s

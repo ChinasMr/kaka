@@ -2,35 +2,44 @@ package rtsp
 
 import (
 	"context"
-	"fmt"
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"io"
 	"net"
+	"net/netip"
 	"sync"
 	"time"
 )
 
 type Server struct {
-	network string
-	address string
-	lis     net.Listener
-	err     error
-	timeout time.Duration
-	baseCtx context.Context
-
-	log     *log.Helper
-	handler Handler
-	serveWG sync.WaitGroup
-	mutex   sync.Mutex
+	network  string
+	address  string
+	rtp      string
+	rtcp     string
+	lis      net.Listener
+	conn     *net.UDPConn
+	rtpConn  *net.UDPConn
+	rtcpConn *net.UDPConn
+	err      error
+	timeout  time.Duration
+	baseCtx  context.Context
+	log      *log.Helper
+	handler  Handler
+	serveWG  sync.WaitGroup
+	mutex    sync.Mutex
+	txs      TransactionOperator
 }
 
 func NewServer(opts ...ServerOption) *Server {
 	srv := &Server{
-		network: "tcp",
+		network: "*",
 		address: ":0",
+		rtp:     "30000",
+		rtcp:    ":30001",
 		mutex:   sync.Mutex{},
 		handler: &UnimplementedServerHandler{},
+		txs:     NewTxOperator(),
 	}
 	for _, o := range opts {
 		o(srv)
@@ -38,90 +47,6 @@ func NewServer(opts ...ServerOption) *Server {
 
 	return srv
 }
-
-func (s *Server) serveStream(trans *transport) {
-	for {
-		req, err := trans.parseRequest()
-		if err != nil {
-			if err == io.EOF {
-				continue
-			}
-			s.log.Errorf("can not parse rtsp request: %v", err)
-			return
-		}
-		var (
-			res  = NewResponse(req.proto, req.cSeq)
-			err1 error
-		)
-
-		switch req.Method() {
-		case method.OPTIONS:
-			err1 = s.handler.OPTIONS(req, res, trans)
-		case method.DESCRIBE:
-			err1 = s.handler.DESCRIBE(req, res, trans)
-		case method.SETUP:
-			err1 = s.handler.SETUP(req, res, trans)
-		case method.ANNOUNCE:
-			err1 = s.handler.ANNOUNCE(req, res, trans)
-		case method.RECORD:
-			err1 = s.handler.RECORD(req, res, trans)
-			if err1 != nil {
-				s.log.Errorf("can not record: %v", err1)
-			}
-			return
-		case method.PLAY:
-			err1 = s.handler.PLAY(req, res, trans)
-			if err1 != nil {
-				s.log.Errorf("can not play: %v", err1)
-			}
-			return
-		case method.TEARDOWN:
-			_ = s.handler.TEARDOWN(req, res, trans)
-			return
-		default:
-			err1 = fmt.Errorf("unknown method: %s", req.Method())
-		}
-		if err1 != nil {
-			s.log.Errorf("can not serve: %v", err1)
-			errRes := NewResponse(req.proto, req.cSeq)
-			errRes.statusCode = 400
-			errRes.status = "Bad Request"
-			_ = trans.sendResponse(errRes)
-			return
-		}
-
-		err1 = trans.sendResponse(res)
-		if err1 != nil {
-			s.log.Errorf("can not response to %s: %v", trans.Addr(), err1)
-			return
-		}
-	}
-}
-
-func (s *Server) handleRawConn(conn net.Conn) {
-	// build transport
-	nt := NewTransport(conn)
-	s.serveStream(nt)
-}
-
-func (s *Server) serve(lis net.Listener) error {
-	for {
-		rawConn, err := lis.Accept()
-		if err != nil {
-			return nil
-		}
-		s.log.Debugf("new connection created from: %v", rawConn.RemoteAddr().String())
-		s.serveWG.Add(1)
-		go func() {
-			s.handleRawConn(rawConn)
-			_ = rawConn.Close()
-			s.log.Debugf("connection closed to: %v", rawConn.RemoteAddr().String())
-			s.serveWG.Done()
-		}()
-	}
-
-}
-
 func (s *Server) Start(ctx context.Context) error {
 	err := s.listen()
 	if err != nil {
@@ -129,34 +54,235 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.baseCtx = ctx
 	log.Infof("[RTSP] server listening on: %s", s.lis.Addr().String())
-	return s.serve(s.lis)
+	log.Infof("[RTP ] server listening on: %s", s.rtpConn.LocalAddr())
+	log.Infof("[RTCP] server listening on: %s", s.rtcpConn.LocalAddr())
+	return s.serve()
 }
-
 func (s *Server) Stop(_ context.Context) error {
 	s.GracefulStop()
 	log.Info("[gRPC] server stopping")
 	return nil
 }
-
 func (s *Server) listen() error {
-	if s.lis == nil {
-		lis, err := net.Listen(s.network, s.address)
+	if s.lis == nil && (s.network == "*" || s.network == "tcp") {
+		lis, err := net.Listen("tcp", s.address)
 		if err != nil {
 			s.err = err
 			return err
 		}
 		s.lis = lis
 	}
+
+	if s.conn == nil && (s.network == "*" || s.network == "udp") {
+		addr, err := net.ResolveUDPAddr("udp", s.address)
+		if err != nil {
+			s.err = err
+			return err
+		}
+		conn, err := net.ListenUDP("udp", addr)
+		if err != nil {
+			s.err = err
+			return err
+		}
+		s.conn = conn
+	}
+
+	addr, err := net.ResolveUDPAddr("udp", s.rtp)
+	if err != nil {
+		s.err = err
+		return err
+	}
+	conn, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		s.err = err
+		return err
+	}
+	s.rtpConn = conn
+	addr, err = net.ResolveUDPAddr("udp", s.rtcp)
+	if err != nil {
+		s.err = err
+		return err
+	}
+	conn, err = net.ListenUDP("udp", addr)
+	if err != nil {
+		s.err = err
+		return err
+	}
+	s.rtcpConn = conn
 	return s.err
 }
+func (s *Server) serve() error {
 
-func (s *Server) RegisterHandler(handler Handler) {
+	go func() {
+		for true {
+			buf := make([]byte, 2048)
+			n, addr, err := s.rtpConn.ReadFromUDPAddrPort(buf)
+			if err != nil {
+				return
+			}
+			go s.serveRawRTP(addr, buf[:n])
+		}
+	}()
+
+	go func() {
+		for true {
+			buf := make([]byte, 2048)
+			n, addr, err := s.rtcpConn.ReadFromUDPAddrPort(buf)
+			if err != nil {
+				return
+			}
+			go s.serveRawRTCP(addr, buf[:n])
+		}
+	}()
+
+	// serve udp
+	go func() {
+		for true {
+			buf := make([]byte, 2048)
+			n, addr, err := s.conn.ReadFromUDPAddrPort(buf)
+			if err != nil {
+				return
+			}
+			go s.serverRawPackage(addr, buf[:n])
+		}
+	}()
+
+	// serve tcp
+	for {
+		rawConn, err := s.lis.Accept()
+		if err != nil {
+			s.log.Errorf("can not accept new connection: %v", err)
+			return err
+		}
+		s.log.Debugf("new tcp connection created from: %v", rawConn.RemoteAddr().String())
+		s.serveWG.Add(1)
+		go func() {
+			s.handleRawConn(rawConn)
+			_ = rawConn.Close()
+			s.log.Debugf("tcp connection closed to: %v", rawConn.RemoteAddr().String())
+			s.serveWG.Done()
+		}()
+	}
+
+}
+
+func (s *Server) serverRawPackage(addr netip.AddrPort, buf []byte) {
+
+}
+func (s *Server) serveRawRTP(addr netip.AddrPort, bytes []byte) {
+
+}
+func (s *Server) serveRawRTCP(addr netip.AddrPort, bytes []byte) {
+
+}
+func (s *Server) handleRawConn(conn net.Conn) {
+	tc := NewTcpTransport(conn)
+	for {
+		req, err := tc.parseRequest()
+		if err != nil {
+			if err == io.EOF {
+				continue
+			}
+			s.log.Errorf("can not parse rtsp request: %v", err)
+			return
+		}
+		// todo remove the log print.
+		s.log.Debugf("%s request from %s", req.Method(), tc.Addr().String())
+		err = s.handleRequest(req, tc)
+		if err != nil {
+			if err == io.EOF {
+				return
+			}
+			s.log.Errorf("can not handle request: %v", err)
+		}
+	}
+}
+
+func (s *Server) handleRequest(req *request, trans Transport) error {
+	var (
+		res = NewResponse(req.proto, req.cSeq)
+	)
+	// check presentation description or media path.
+	if len(req.Path()) <= 0 {
+		Err500(res)
+		return trans.SendResponse(res)
+	}
+
+	// stateless functions.
+	if req.method == method.OPTIONS ||
+		req.method == method.DESCRIBE ||
+		req.method == method.ANNOUNCE {
+		switch req.Method() {
+		case method.OPTIONS:
+			s.handler.OPTIONS(req, res)
+		case method.DESCRIBE:
+			s.handler.DESCRIBE(req, res)
+		case method.ANNOUNCE:
+			s.handler.ANNOUNCE(req, res)
+		}
+		// auto send response.
+		return trans.SendResponse(res)
+	} else if req.method == method.SETUP {
+		// check state, buf every state can call the setup.
+		// get transports header.
+		transports, ok := req.Transport()
+		if !ok {
+			ErrUnsupportedTransport(res)
+			return trans.SendResponse(res)
+		}
+
+		// disabled multicast.
+		ok = transports.Has("unicast")
+		if !ok {
+			ErrUnsupportedTransport(res)
+			return trans.SendResponse(res)
+		}
+
+		// get tx
+		tx := s.txs.GetTx(req.SessionID())
+		// refresh the transport
+		tx.trans = trans
+		// handle request
+		return s.handler.SETUP(req, res, tx)
+	} else if req.method == method.RECORD {
+		tx := s.txs.GetTx(req.SessionID())
+		// state check
+		if tx.state != status.READY && tx.state != status.RECORDING {
+			ErrMethodNotValidINThisState(res)
+			return trans.SendResponse(res)
+		}
+		// refresh the transport
+		tx.trans = trans
+		// handle request
+		return s.handler.RECORD(req, res, tx)
+	} else if req.method == method.PLAY {
+		tx := s.txs.GetTx(req.SessionID())
+		// state check
+		if tx.state != status.READY && tx.state != status.PLAYING {
+			ErrMethodNotValidINThisState(res)
+			return trans.SendResponse(res)
+		}
+		// refresh the transport
+		tx.trans = trans
+		// handle request
+		return s.handler.PLAY(req, res, tx)
+	} else if req.method == method.TEARDOWN || req.method == method.DOWN {
+		tx := s.txs.GetTx(req.SessionID())
+		tx.trans = trans
+		// state check, you can call teardown anytime.
+		return s.handler.TEARDOWN(req, res, tx)
+	} else {
+		ErrMethodNotAllowed(res)
+		return trans.SendResponse(res)
+	}
+}
+
+func RegisterHandler(srv *Server, handler Handler) {
 	if handler == nil {
 		return
 	}
-	s.handler = handler
+	srv.handler = handler
 }
-
 func (s *Server) GracefulStop() {
 	_ = s.lis.Close()
 }

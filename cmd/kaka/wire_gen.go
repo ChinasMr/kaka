@@ -12,19 +12,19 @@ import (
 	"github.com/ChinasMr/kaka/internal/data"
 	"github.com/ChinasMr/kaka/internal/server"
 	"github.com/ChinasMr/kaka/internal/service"
-	"github.com/ChinasMr/kaka/pkg/app"
+	"github.com/ChinasMr/kaka/pkg/application"
 	"github.com/ChinasMr/kaka/pkg/log"
 )
 
 // Injectors from wire.go:
 
-func wireApp(confServer *conf.Server, logger log.Logger) (*app.App, func(), error) {
-	roomRepo := data.NewRoomRepo(logger)
-	kakaUseCase := biz.NewKakaUseCase(logger, roomRepo)
+func wireApp(confServer *conf.Server, logger log.Logger) (*application.App, func(), error) {
+	channelRepo := data.NewChannelRepo(logger)
+	kakaUseCase := biz.NewKakaUseCase(logger, channelRepo)
 	kakaService := service.NewKakaService(logger, kakaUseCase)
 	grpcServer := server.NewGRPCServer(confServer, kakaService)
 	rtspServer := server.NewRTSPServer(confServer, kakaService, logger)
-	appApp := newApp(logger, grpcServer, rtspServer)
-	return appApp, func() {
+	app := newApp(logger, grpcServer, rtspServer)
+	return app, func() {
 	}, nil
 }

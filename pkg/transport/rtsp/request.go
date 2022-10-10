@@ -1,7 +1,7 @@
 package rtsp
 
 import (
-	"fmt"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/header"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
 	"net/url"
 	"strings"
@@ -9,48 +9,43 @@ import (
 
 var _ Request = (*request)(nil)
 
-type TransportHeader map[string]struct{}
-
-func (t TransportHeader) Has(keys ...string) bool {
-	for _, key := range keys {
-		_, ok := t[key]
-		if !ok {
-			return false
-		}
-	}
-	return true
-}
-
-func (t TransportHeader) Value(k string) string {
-	prefix := fmt.Sprintf("%s=", k)
-	for key := range t {
-		if strings.HasPrefix(key, prefix) {
-			return key[len(prefix):]
-		}
-	}
-	return ""
-}
-
 type Request interface {
 	Method() method.Method
 	URL() *url.URL
 	Path() string
 	Headers() map[string][]string
 	Header(key string) ([]string, bool)
-	Transport() (TransportHeader, bool)
+	Transport() (header.TransportHeader, bool)
 	CSeq() string
 	Proto() string
+	SessionID() string
+	ContentType() string
 	Body() []byte
 }
 
 type request struct {
 	method  method.Method
 	url     *url.URL
-	path    string
 	headers map[string][]string
 	body    []byte
 	cSeq    string
 	proto   string
+}
+
+func (r request) ContentType() string {
+	ct, ok := r.headers[header.ContentType]
+	if !ok || len(ct) == 0 {
+		return ""
+	}
+	return ct[0]
+}
+
+func (r request) SessionID() string {
+	session, ok := r.headers["Session"]
+	if !ok || len(session) == 0 {
+		return ""
+	}
+	return session[0]
 }
 
 func (r request) URL() *url.URL {
@@ -69,7 +64,7 @@ func (r request) CSeq() string {
 	return r.cSeq
 }
 
-func (r request) Transport() (TransportHeader, bool) {
+func (r request) Transport() (header.TransportHeader, bool) {
 	trans, ok := r.headers["Transport"]
 	if ok == false || len(trans) == 0 {
 		return nil, ok
@@ -87,7 +82,7 @@ func (r request) Header(key string) ([]string, bool) {
 }
 
 func (r request) Path() string {
-	return r.path
+	return r.url.Path
 }
 
 func (r request) Headers() map[string][]string {

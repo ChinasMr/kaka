@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"github.com/ChinasMr/kaka/internal/conf"
-	"github.com/ChinasMr/kaka/pkg/app"
+	"github.com/ChinasMr/kaka/pkg/application"
 	"github.com/ChinasMr/kaka/pkg/config"
 	"github.com/ChinasMr/kaka/pkg/config/file"
 	"github.com/ChinasMr/kaka/pkg/log"
@@ -14,7 +14,7 @@ import (
 
 var (
 	Name       = "kaka"
-	Version    = "v0.0.1"
+	Version    = "alpha0.2"
 	flagConfig string
 	id, _      = os.Hostname()
 )
@@ -23,14 +23,14 @@ func init() {
 	flag.StringVar(&flagConfig, "conf", "../../configs", "config path, eg: -conf config.yaml")
 }
 
-func newApp(logger log.Logger, gs *grpc.Server, rtsp *rtsp.Server) *app.App {
-	return app.New(
-		app.ID(id),
-		app.Name(Name),
-		app.Version(Version),
-		app.Metadata(map[string]string{}),
-		app.Logger(logger),
-		app.Server(
+func newApp(logger log.Logger, gs *grpc.Server, rtsp *rtsp.Server) *application.App {
+	return application.New(
+		application.ID(id),
+		application.Name(Name),
+		application.Version(Version),
+		application.Metadata(map[string]string{}),
+		application.Logger(logger),
+		application.Server(
 			gs,
 			rtsp,
 		),
