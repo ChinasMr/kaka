@@ -39,10 +39,17 @@ func (s *KakaService) Debug(ctx context.Context, _ *pb.DebugRequest) (*pb.DebugR
 	for _, c := range channels {
 		cs := make([]*pb.Session, 0, c.Terminals.Num())
 		for _, tx := range c.Terminals.ListTx() {
+			streams := make([]*pb.Stream, 0, tx.Medias())
+			// todo add tx and rx package.
+			// todo fill stream info.
 			cs = append(cs, &pb.Session{
 				Id:          tx.ID(),
 				Addr:        tx.Transport().Addr().String(),
 				Interleaved: tx.Interleaved(),
+				Status:      getStatus(tx.Status()),
+				Rx:          0,
+				Tx:          0,
+				Streams:     streams,
 			})
 		}
 		channel := &pb.Channel{
@@ -78,13 +85,25 @@ func (s *KakaService) ANNOUNCE(req rtsp.Request, res rtsp.Response) {
 		return
 	}
 	id := parseChannelId(req.Path())
-
 	err = s.uc.SetChannelPresentationDescription(context.Background(), id, message, req.Body())
 	if err != nil {
 		s.log.Errorf("can not set channel presentation description: %v", err)
 		rtsp.Err500(res)
 		return
 	}
+}
+
+func (s *KakaService) DESCRIBE(req rtsp.Request, res rtsp.Response) {
+	log.Debugf("describe request from: %s", req.URL().String())
+	id := parseChannelId(req.Path())
+	channel, err := s.uc.GetChannel(context.Background(), id)
+	if err != nil {
+		s.log.Errorf("can not get channel: %v", err)
+		return
+	}
+	res.SetHeader("Content-Base", req.URL().String())
+	res.SetHeader("Content-Type", header.ContentTypeSDP)
+	res.SetBody(channel.RawSDP)
 }
 
 func (s *KakaService) SETUP(req rtsp.Request, res rtsp.Response, tx rtsp.Transaction) error {
@@ -225,27 +244,6 @@ func (s *KakaService) RECORD(req rtsp.Request, res rtsp.Response, tx rtsp.Transa
 	return nil
 }
 
-func (s *KakaService) TEARDOWN(req rtsp.Request, res rtsp.Response, tx rtsp.Transaction) error {
-	s.log.Debugf("teardown/down request: %s", req.URL().String())
-	res.SetHeader("Session", tx.ID())
-	_ = tx.Transport().SendResponse(res)
-	// todo clear serve resources.
-	return nil
-}
-
-func (s *KakaService) DESCRIBE(req rtsp.Request, res rtsp.Response) {
-	log.Debugf("describe request from: %s", req.URL().String())
-	id := parseChannelId(req.Path())
-	channel, err := s.uc.GetChannel(context.Background(), id)
-	if err != nil {
-		s.log.Errorf("can not get channel: %v", err)
-		return
-	}
-	res.SetHeader("Content-Base", req.URL().String())
-	res.SetHeader("Content-Type", header.ContentTypeSDP)
-	res.SetBody(channel.RawSDP)
-}
-
 func (s *KakaService) PLAY(req rtsp.Request, res rtsp.Response, tx rtsp.Transaction) error {
 	log.Debugf("play request from: %s", req.URL().String())
 	id := parseChannelId(req.Path())
@@ -275,6 +273,15 @@ func (s *KakaService) PLAY(req rtsp.Request, res rtsp.Response, tx rtsp.Transact
 	return nil
 }
 
+func (s *KakaService) TEARDOWN(req rtsp.Request, res rtsp.Response, tx rtsp.Transaction) error {
+	s.log.Debugf("teardown/down request: %s", req.URL().String())
+	res.SetHeader("Session", tx.ID())
+	_ = tx.Transport().SendResponse(res)
+	// todo clear serve resources.
+	return nil
+}
+
+// parse the channel id from path.
 func parseChannelId(p string) string {
 	str := strings.TrimLeft(p, "/")
 	index := strings.Index(str, "/")
@@ -284,6 +291,7 @@ func parseChannelId(p string) string {
 	return str
 }
 
+// parse the sdp message from bytes.
 func decodeSDP(content []byte) (*sdp.Message, error) {
 	s, err := sdp.DecodeSession(content, nil)
 	if err != nil {
@@ -296,4 +304,18 @@ func decodeSDP(content []byte) (*sdp.Message, error) {
 		return nil, err
 	}
 	return rv, nil
+}
+
+// get session status.
+func getStatus(s status.Status) string {
+	switch s {
+	case status.PLAYING:
+		return "Playing"
+	case status.RECORDING:
+		return "Recording"
+	case status.READY:
+		return "Ready"
+	default:
+		return "Init"
+	}
 }

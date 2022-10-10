@@ -12,10 +12,19 @@ service Kaka {
   }
 }
 
+
+message Stream {
+  uint32 id = 1;
+}
+
 message Session {
   string id = 1;
   string addr = 2;
   bool interleaved = 3;
+  string status = 4;
+  uint32 rx = 5;
+  uint32 tx = 6;
+  repeated Stream streams = 7;
 }
 
 message Channel {
