@@ -197,6 +197,7 @@ func (s *KakaService) RECORD(req rtsp.Request, res rtsp.Response, tx rtsp.Transa
 		return err
 	}
 	tx.SetStatus(status.RECORDING)
+	channel.Source = tx
 	// interleaved, the tpc connection for RTSP turns to RTP/RTCP.
 	if tx.Interleaved() {
 		tpcTrans, ok := tx.Transport().(*rtsp.TcpTransport)
@@ -207,8 +208,8 @@ func (s *KakaService) RECORD(req rtsp.Request, res rtsp.Response, tx rtsp.Transa
 
 		input := channel.Terminals.Input()
 		for {
-			buf := make([]byte, 2048)
-			ch, n, err1 := tpcTrans.ReadInterleavedFrame(buf)
+			p := channel.Terminals.Malloc()
+			ch, n, err1 := tpcTrans.ReadInterleavedFrame(p.Data)
 			if err1 != nil {
 				if err1 == io.EOF {
 					s.log.Debugf("client close the interleaved connection")
@@ -216,10 +217,9 @@ func (s *KakaService) RECORD(req rtsp.Request, res rtsp.Response, tx rtsp.Transa
 				}
 				return err
 			}
-			input <- &rtsp.Package{
-				Ch:   ch,
-				Data: buf[:n],
-			}
+			p.Len = n
+			p.Ch = ch
+			input <- p
 		}
 	}
 	return nil

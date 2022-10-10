@@ -1,7 +1,6 @@
 package biz
 
 import (
-	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"sync"
@@ -12,12 +11,29 @@ type TerminalsOperator interface {
 	Input() chan *rtsp.Package
 	Num() int
 	ListTx() []rtsp.Transaction
+	Malloc() *rtsp.Package
 }
 
 type terminalsOperator struct {
 	input     chan *rtsp.Package
 	terminals map[string]rtsp.Transaction
 	rwm       sync.RWMutex
+	pool      *sync.Pool
+}
+
+func (t *terminalsOperator) Malloc() *rtsp.Package {
+	return t.pool.Get().(*rtsp.Package)
+}
+
+func NewTerminalsOperator() TerminalsOperator {
+	operator := &terminalsOperator{
+		input:     make(chan *rtsp.Package, 2),
+		terminals: map[string]rtsp.Transaction{},
+		rwm:       sync.RWMutex{},
+		pool:      &sync.Pool{New: func() any { return &rtsp.Package{Data: make([]byte, 2048)} }},
+	}
+	go operator.serve()
+	return operator
 }
 
 func (t *terminalsOperator) ListTx() []rtsp.Transaction {
@@ -45,30 +61,22 @@ func (t *terminalsOperator) Add(tx rtsp.Transaction) {
 }
 
 func (t *terminalsOperator) serve() {
-	for {
-		data := <-t.input
+	for pack := range t.input {
+		p := pack
+		wg := &sync.WaitGroup{}
 		t.rwm.RLock()
-		for _, ter := range t.terminals {
-			if ter.Status() == status.PLAYING {
-				//go func() {
-				err := ter.Forward(data)
-				if err != nil {
-					log.Errorf("can not forward: %v", err)
-				}
-				//}()
+		for _, terminal := range t.terminals {
+			if terminal.Status() == status.PLAYING {
+				wg.Add(1)
+				terminal.Forward(p, wg)
 			}
 		}
+		go func() {
+			wg.Wait()
+			p.Len = 0
+			p.Ch = 0
+			t.pool.Put(p)
+		}()
 		t.rwm.RUnlock()
-		// todo donation
 	}
-}
-
-func NewTerminalsOperator(ch chan *rtsp.Package) TerminalsOperator {
-	nt := &terminalsOperator{
-		input:     ch,
-		terminals: map[string]rtsp.Transaction{},
-		rwm:       sync.RWMutex{},
-	}
-	go nt.serve()
-	return nt
 }

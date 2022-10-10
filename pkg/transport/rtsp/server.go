@@ -26,7 +26,6 @@ type Server struct {
 	baseCtx  context.Context
 	log      *log.Helper
 	handler  Handler
-	serveWG  sync.WaitGroup
 	mutex    sync.Mutex
 	txs      TransactionOperator
 }
@@ -155,12 +154,10 @@ func (s *Server) serve() error {
 			return err
 		}
 		s.log.Debugf("new tcp connection created from: %v", rawConn.RemoteAddr().String())
-		s.serveWG.Add(1)
 		go func() {
 			s.handleRawConn(rawConn)
 			_ = rawConn.Close()
 			s.log.Debugf("tcp connection closed to: %v", rawConn.RemoteAddr().String())
-			s.serveWG.Done()
 		}()
 	}
 

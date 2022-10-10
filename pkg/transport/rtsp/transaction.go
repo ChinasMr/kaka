@@ -10,6 +10,7 @@ var _ Transaction = (*transaction)(nil)
 
 type Package struct {
 	Ch   int
+	Len  uint32
 	Data []byte
 }
 
@@ -22,7 +23,7 @@ type Transaction interface {
 	SetInterleaved()
 	Medias() int
 	Transport() Transport
-	Forward(data *Package) error
+	Forward(data *Package, wg *sync.WaitGroup)
 }
 
 type TransactionOperator interface {
@@ -70,11 +71,13 @@ type transaction struct {
 	trans       Transport
 }
 
-func (t *transaction) Forward(data *Package) error {
-	if t.interleaved {
-		return t.trans.SendData(data.Ch, data.Data)
-	}
-	return nil
+func (t *transaction) Forward(data *Package, wg *sync.WaitGroup) {
+	go func() {
+		if t.interleaved {
+			_ = t.trans.SendData(data.Ch, data.Data[:data.Len])
+		}
+		wg.Done()
+	}()
 }
 
 func (t *transaction) ID() string {
