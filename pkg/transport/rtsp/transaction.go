@@ -8,6 +8,11 @@ import (
 
 var _ Transaction = (*transaction)(nil)
 
+type Package struct {
+	Ch   int
+	Data []byte
+}
+
 type Transaction interface {
 	ID() string
 	Status() status.Status
@@ -17,6 +22,7 @@ type Transaction interface {
 	SetInterleaved()
 	Medias() int
 	Transport() Transport
+	Forward(data *Package) error
 }
 
 type TransactionOperator interface {
@@ -62,6 +68,13 @@ type transaction struct {
 	medias      map[string]bool
 	interleaved bool
 	trans       Transport
+}
+
+func (t *transaction) Forward(data *Package) error {
+	if t.interleaved {
+		return t.trans.SendData(data.Ch, data.Data)
+	}
+	return nil
 }
 
 func (t *transaction) ID() string {

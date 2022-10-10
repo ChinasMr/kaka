@@ -3,32 +3,56 @@ package biz
 import (
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"sync"
 )
 
 type TerminalsOperator interface {
+	Add(tx rtsp.Transaction)
+	Input() chan *rtsp.Package
 }
 
 type terminalsOperator struct {
-	input     chan []byte
-	terminals []*rtsp.Transaction
+	input     chan *rtsp.Package
+	terminals map[string]rtsp.Transaction
 	rwm       sync.RWMutex
+}
+
+func (t *terminalsOperator) Input() chan *rtsp.Package {
+	return t.input
+}
+
+func (t *terminalsOperator) Add(tx rtsp.Transaction) {
+	t.rwm.Lock()
+	defer t.rwm.Unlock()
+	t.terminals[tx.ID()] = tx
 }
 
 func (t *terminalsOperator) serve() {
 	for {
 		data := <-t.input
-		log.Debugf("live rome received rtp/rtcp data: %d bytes", len(data))
+		t.rwm.RLock()
+		for _, ter := range t.terminals {
+			if ter.Status() == status.PLAYING {
+				//go func() {
+				err := ter.Forward(data)
+				if err != nil {
+					log.Errorf("can not forward: %v", err)
+				}
+				//}()
+			}
+		}
+		t.rwm.RUnlock()
 		// todo donation
 	}
 }
 
-func NewTerminalsOperator(ch chan []byte) TerminalsOperator {
+func NewTerminalsOperator(ch chan *rtsp.Package) TerminalsOperator {
 	nt := &terminalsOperator{
 		input:     ch,
-		terminals: nil,
+		terminals: map[string]rtsp.Transaction{},
 		rwm:       sync.RWMutex{},
 	}
 	go nt.serve()
-	return &nt
+	return nt
 }

@@ -117,27 +117,42 @@ func (s *KakaService) SETUP(req rtsp.Request, res rtsp.Response, tx rtsp.Transac
 
 	}
 
-	//// play
-	//if !record {
-	//	isTCP := transports.Has("RTP/AVP/TCP")
-	//	if isTCP == false {
-	//		return fmt.Errorf("can not get transport info")
-	//	}
-	//	if isTCP {
-	//		interleaved := transports.Value("interleaved")
-	//		if interleaved == "" {
-	//			return fmt.Errorf("can not get interleaved")
-	//		}
-	//		// todo check the stream channel
-	//		res.SetHeader("Transport", strings.Join([]string{
-	//			"RTP/AVP/TCP",
-	//			"unicast",
-	//			fmt.Sprintf("interleaved=%s", interleaved),
-	//		}, ";"))
-	//		res.SetHeader("Session", "12345678")
-	//		return nil
-	//	}
-	//}
+	// play
+	if !record {
+		defer func() {
+			if tx.Medias() >= len(channel.SDP.Medias) {
+				tx.SetStatus(status.READY)
+				// if ready, add this ter to clients set.
+				channel.Terminals.Add(tx)
+			}
+		}()
+		isTCP := transports.Has("RTP/AVP/TCP")
+		if isTCP == false {
+			return fmt.Errorf("can not get transport info")
+		}
+		if isTCP {
+			interleaved := transports.Value("interleaved")
+			if interleaved == "" {
+				return fmt.Errorf("can not get interleaved")
+			}
+			// todo check the stream channel
+			res.SetHeader("Transport", strings.Join([]string{
+				"RTP/AVP/TCP",
+				"unicast",
+				fmt.Sprintf("interleaved=%s", interleaved),
+			}, ";"))
+			res.SetHeader("Session", tx.ID())
+			err1 := tx.Transport().SendResponse(res)
+			if err1 != nil {
+				return err1
+			}
+			// acknowledged response.
+			tx.AddMedia(interleaved)
+			tx.SetInterleaved()
+			s.log.Debugf("%s set interleaved stream: %s", req.URL().String(), interleaved)
+			return nil
+		}
+	}
 
 	return nil
 }
@@ -155,8 +170,7 @@ func (s *KakaService) RECORD(req rtsp.Request, res rtsp.Response, tx rtsp.Transa
 	if err != nil {
 		return err
 	}
-	tx.SetStatus(status.PLAYING)
-
+	tx.SetStatus(status.RECORDING)
 	// interleaved, the tpc connection for RTSP turns to RTP/RTCP.
 	if tx.Interleaved() {
 		tpcTrans, ok := tx.Transport().(*rtsp.TcpTransport)
@@ -164,9 +178,11 @@ func (s *KakaService) RECORD(req rtsp.Request, res rtsp.Response, tx rtsp.Transa
 			return fmt.Errorf("interleaved tranports error")
 		}
 		s.log.Debugf("interleaved connect to %s", tpcTrans.Addr().String())
-		buf := make([]byte, 2048)
+
+		input := channel.Terminals.Input()
 		for {
-			_, n, err1 := tpcTrans.ReadInterleavedFrame(buf)
+			buf := make([]byte, 2048)
+			ch, n, err1 := tpcTrans.ReadInterleavedFrame(buf)
 			if err1 != nil {
 				if err1 == io.EOF {
 					s.log.Debugf("client close the interleaved connection")
@@ -174,13 +190,13 @@ func (s *KakaService) RECORD(req rtsp.Request, res rtsp.Response, tx rtsp.Transa
 				}
 				return err
 			}
-			s.log.Debugf("read interleaved data: %d bytes", n)
-			channel.Input <- buf[:n]
+			input <- &rtsp.Package{
+				Ch:   ch,
+				Data: buf[:n],
+			}
 		}
 	}
-
 	return nil
-
 }
 
 func (s *KakaService) TEARDOWN(req rtsp.Request, res rtsp.Response, tx rtsp.Transaction) error {
@@ -191,51 +207,47 @@ func (s *KakaService) TEARDOWN(req rtsp.Request, res rtsp.Response, tx rtsp.Tran
 	return nil
 }
 
-//
-//func (s *KakaService) DESCRIBE(req rtsp.Request, res rtsp.Response) {
-//	log.Debugf("describe request from: %s", req.URL().String())
-//	id := parseRoomId(req.Path())
-//	room, err := s.uc.GetRoom(context.Background(), id)
-//	if err != nil {
-//		return
-//	}
-//	if room.Source == nil {
-//		return
-//	}
-//
-//	res.SetHeader("Content-Base", req.URL().String())
-//	res.SetHeader("Content-Type", "application/sdp")
-//	res.SetBody(room.SDPRaw)
-//
-//}
-//
-//func (s *KakaService) PLAY(req rtsp.Request, res rtsp.Response, tx rtsp.Transport) error {
-//	log.Debugf("play request from: %s", tx.Addr().String())
-//	id := parseRoomId(req.Path())
-//	room, err := s.uc.GetRoom(context.Background(), id)
-//	if err != nil {
-//		return err
-//	}
-//
-//	// todo check the channel setup process.
-//	res.SetHeader("Session", "12345678")
-//	err = tx.SendResponse(res)
-//	if err != nil {
-//		return err
-//	}
-//	room.Terminals = append(room.Terminals, tx)
-//	//buf := make([]byte, 2048)
-//	//for {
-//	//	_, err1 := tx.RawConn().Read(buf)
-//	//	if err1 != nil {
-//	//		if err == io.EOF {
-//	//			return nil
-//	//		}
-//	//		return err1
-//	//	}
-//	//}
-//	return nil
-//}
+func (s *KakaService) DESCRIBE(req rtsp.Request, res rtsp.Response) {
+	log.Debugf("describe request from: %s", req.URL().String())
+	id := parseChannelId(req.Path())
+	channel, err := s.uc.GetChannel(context.Background(), id)
+	if err != nil {
+		s.log.Errorf("can not get channel: %v", err)
+		return
+	}
+	res.SetHeader("Content-Base", req.URL().String())
+	res.SetHeader("Content-Type", header.ContentTypeSDP)
+	res.SetBody(channel.RawSDP)
+}
+
+func (s *KakaService) PLAY(req rtsp.Request, res rtsp.Response, tx rtsp.Transaction) error {
+	log.Debugf("play request from: %s", req.URL().String())
+	id := parseChannelId(req.Path())
+	_, err := s.uc.GetChannel(context.Background(), id)
+	if err != nil {
+		rtsp.Err404(res)
+		return tx.Transport().SendResponse(res)
+	}
+	res.SetHeader("Session", tx.ID())
+	err = tx.Transport().SendResponse(res)
+	if err != nil {
+		return err
+	}
+	tx.SetStatus(status.PLAYING)
+
+	if tx.Interleaved() {
+		buf := make([]byte, 2048)
+		for {
+			_, err1 := tx.Transport().ReadData(buf)
+			if err1 != nil {
+				tx.SetStatus(status.READY)
+				return io.EOF
+			}
+		}
+	}
+
+	return nil
+}
 
 func parseChannelId(p string) string {
 	str := strings.TrimLeft(p, "/")

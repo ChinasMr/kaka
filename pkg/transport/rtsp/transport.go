@@ -22,6 +22,8 @@ var _ Transport = (*TcpTransport)(nil)
 
 type Transport interface {
 	SendResponse(res Response) error
+	SendData(ch int, data []byte) error
+	ReadData(buf []byte) (int, error)
 	Addr() net.Addr
 	parseRequest() (*request, error)
 	Close() error
@@ -31,12 +33,20 @@ type TcpTransport struct {
 	conn net.Conn
 }
 
+func (g *TcpTransport) ReadData(buf []byte) (int, error) {
+	return g.conn.Read(buf)
+}
+
+func (g *TcpTransport) SendData(ch int, data []byte) error {
+	return g.writeInterleavedFrame(ch, data)
+}
+
 func NewTcpTransport(conn net.Conn) *TcpTransport {
 	return &TcpTransport{
 		conn: conn}
 }
 
-func (g *TcpTransport) WriteInterleavedFrame(channel int, frame []byte) error {
+func (g *TcpTransport) writeInterleavedFrame(channel int, frame []byte) error {
 	buf := make([]byte, 2048)
 	buf[0] = 0x24
 	buf[1] = byte(channel)

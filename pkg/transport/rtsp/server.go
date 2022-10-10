@@ -203,7 +203,7 @@ func (s *Server) handleRequest(req *request, trans Transport) error {
 		res = NewResponse(req.proto, req.cSeq)
 	)
 	// check presentation description or media path.
-	if len(req.Path()) <= 1 {
+	if len(req.Path()) <= 0 {
 		Err500(res)
 		return trans.SendResponse(res)
 	}
@@ -255,15 +255,22 @@ func (s *Server) handleRequest(req *request, trans Transport) error {
 		tx.trans = trans
 		// handle request
 		return s.handler.RECORD(req, res, tx)
-	} else if req.method == method.TEARDOWN {
+	} else if req.method == method.PLAY {
 		tx := s.txs.GetTx(req.SessionID())
+		// state check
+		if tx.state != status.READY && tx.state != status.PLAYING {
+			ErrMethodNotValidINThisState(res)
+			return trans.SendResponse(res)
+		}
+		// refresh the transport
+		tx.trans = trans
+		// handle request
+		return s.handler.PLAY(req, res, tx)
+	} else if req.method == method.TEARDOWN || req.method == method.DOWN {
+		tx := s.txs.GetTx(req.SessionID())
+		tx.trans = trans
 		// state check, you can call teardown anytime.
 		return s.handler.TEARDOWN(req, res, tx)
-	} else if req.method == method.DOWN {
-		tx := s.txs.GetTx(req.SessionID())
-		// state check, you can call teardown anytime.
-		_ = s.handler.TEARDOWN(req, res, tx)
-		return io.EOF
 	} else {
 		ErrMethodNotAllowed(res)
 		return trans.SendResponse(res)

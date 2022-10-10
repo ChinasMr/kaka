@@ -14,7 +14,6 @@ type Channel struct {
 	SDP       *sdp.Message
 	RawSDP    []byte
 	mu        sync.Mutex
-	Input     chan []byte
 }
 
 type ChannelRepo interface {
