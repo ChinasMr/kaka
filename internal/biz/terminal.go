@@ -10,12 +10,28 @@ import (
 type TerminalsOperator interface {
 	Add(tx rtsp.Transaction)
 	Input() chan *rtsp.Package
+	Num() int
+	ListTx() []rtsp.Transaction
 }
 
 type terminalsOperator struct {
 	input     chan *rtsp.Package
 	terminals map[string]rtsp.Transaction
 	rwm       sync.RWMutex
+}
+
+func (t *terminalsOperator) ListTx() []rtsp.Transaction {
+	t.rwm.RLock()
+	defer t.rwm.RUnlock()
+	rv := make([]rtsp.Transaction, 0, len(t.terminals))
+	for _, tx := range t.terminals {
+		rv = append(rv, tx)
+	}
+	return rv
+}
+
+func (t *terminalsOperator) Num() int {
+	return len(t.terminals)
 }
 
 func (t *terminalsOperator) Input() chan *rtsp.Package {

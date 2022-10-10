@@ -9,6 +9,7 @@ import (
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/grpc"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp"
+	"github.com/go-kratos/kratos/v2/transport/http"
 	"os"
 )
 
@@ -23,7 +24,7 @@ func init() {
 	flag.StringVar(&flagConfig, "conf", "../../configs", "config path, eg: -conf config.yaml")
 }
 
-func newApp(logger log.Logger, gs *grpc.Server, rtsp *rtsp.Server) *application.App {
+func newApp(logger log.Logger, gs *grpc.Server, ht *http.Server, rtsp *rtsp.Server) *application.App {
 	return application.New(
 		application.ID(id),
 		application.Name(Name),
@@ -33,6 +34,7 @@ func newApp(logger log.Logger, gs *grpc.Server, rtsp *rtsp.Server) *application.
 		application.Server(
 			gs,
 			rtsp,
+			ht,
 		),
 	)
 }

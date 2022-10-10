@@ -17,6 +17,16 @@ type channelRepo struct {
 	rwm      sync.RWMutex
 }
 
+func (r *channelRepo) List(ctx context.Context) ([]*biz.Channel, error) {
+	rv := make([]*biz.Channel, 0, len(r.channels))
+	r.rwm.RLock()
+	defer r.rwm.RUnlock()
+	for _, p := range r.channels {
+		rv = append(rv, p)
+	}
+	return rv, nil
+}
+
 func (r *channelRepo) Get(_ context.Context, id string) (*biz.Channel, error) {
 	r.rwm.RLock()
 	defer r.rwm.RUnlock()

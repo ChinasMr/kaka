@@ -2,4 +2,4 @@ package server
 
 import "github.com/google/wire"
 
-var ProviderSet = wire.NewSet(NewGRPCServer, NewRTSPServer)
+var ProviderSet = wire.NewSet(NewGRPCServer, NewRTSPServer, NewHttpServer)

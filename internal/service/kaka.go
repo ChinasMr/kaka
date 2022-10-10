@@ -28,13 +28,39 @@ func NewKakaService(logger log.Logger, useCase *biz.KakaUseCase) *KakaService {
 	}
 }
 
-func (s *KakaService) Debug(_ context.Context, _ *pb.DebugRequest) (*pb.DebugReply, error) {
+func (s *KakaService) Debug(ctx context.Context, _ *pb.DebugRequest) (*pb.DebugReply, error) {
 	s.log.Debugf("debug request incoming!")
+	channels, err := s.uc.ListChannels(ctx)
+	if err != nil {
+		s.log.Errorf("debug err can not list channel: %v", err)
+		return nil, err
+	}
+	rv := make([]*pb.Channel, 0, len(channels))
+	for _, c := range channels {
+		cs := make([]*pb.Session, 0, c.Terminals.Num())
+		for _, tx := range c.Terminals.ListTx() {
+			cs = append(cs, &pb.Session{
+				Id:          tx.ID(),
+				Addr:        tx.Transport().Addr().String(),
+				Interleaved: tx.Interleaved(),
+			})
+		}
+		channel := &pb.Channel{
+			Id:      c.Id,
+			Source:  nil,
+			Clients: cs,
+		}
+		if c.Source != nil {
+			channel.Source = &pb.Session{
+				Id:          c.Source.ID(),
+				Addr:        c.Source.Transport().Addr().String(),
+				Interleaved: c.Source.Interleaved(),
+			}
+		}
+		rv = append(rv, channel)
+	}
 	return &pb.DebugReply{
-		Id:       "1",
-		Name:     "2",
-		Version:  "3",
-		Metadata: map[string]string{},
+		Channels: rv,
 	}, nil
 }
 

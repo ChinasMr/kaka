@@ -23,8 +23,9 @@ func wireApp(confServer *conf.Server, logger log.Logger) (*application.App, func
 	kakaUseCase := biz.NewKakaUseCase(logger, channelRepo)
 	kakaService := service.NewKakaService(logger, kakaUseCase)
 	grpcServer := server.NewGRPCServer(confServer, kakaService)
+	httpServer := server.NewHttpServer(confServer, kakaService)
 	rtspServer := server.NewRTSPServer(confServer, kakaService, logger)
-	app := newApp(logger, grpcServer, rtspServer)
+	app := newApp(logger, grpcServer, httpServer, rtspServer)
 	return app, func() {
 	}, nil
 }
