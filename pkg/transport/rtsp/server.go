@@ -18,7 +18,6 @@ type Server struct {
 	rtp      string
 	rtcp     string
 	lis      net.Listener
-	conn     *net.UDPConn
 	rtpConn  *net.UDPConn
 	rtcpConn *net.UDPConn
 	err      error
@@ -32,7 +31,7 @@ type Server struct {
 
 func NewServer(opts ...ServerOption) *Server {
 	srv := &Server{
-		network: "*",
+		network: "tcp",
 		address: ":0",
 		rtp:     "30000",
 		rtcp:    ":30001",
@@ -63,27 +62,13 @@ func (s *Server) Stop(_ context.Context) error {
 	return nil
 }
 func (s *Server) listen() error {
-	if s.lis == nil && (s.network == "*" || s.network == "tcp") {
-		lis, err := net.Listen("tcp", s.address)
+	if s.lis == nil {
+		lis, err := net.Listen(s.network, s.address)
 		if err != nil {
 			s.err = err
 			return err
 		}
 		s.lis = lis
-	}
-
-	if s.conn == nil && (s.network == "*" || s.network == "udp") {
-		addr, err := net.ResolveUDPAddr("udp", s.address)
-		if err != nil {
-			s.err = err
-			return err
-		}
-		conn, err := net.ListenUDP("udp", addr)
-		if err != nil {
-			s.err = err
-			return err
-		}
-		s.conn = conn
 	}
 
 	addr, err := net.ResolveUDPAddr("udp", s.rtp)
@@ -134,18 +119,6 @@ func (s *Server) serve() error {
 		}
 	}()
 
-	// serve udp
-	go func() {
-		for true {
-			buf := make([]byte, 2048)
-			n, addr, err := s.conn.ReadFromUDPAddrPort(buf)
-			if err != nil {
-				return
-			}
-			go s.serverRawPackage(addr, buf[:n])
-		}
-	}()
-
 	// serve tcp
 	for {
 		rawConn, err := s.lis.Accept()
@@ -155,17 +128,16 @@ func (s *Server) serve() error {
 		}
 		s.log.Debugf("new tcp connection created from: %v", rawConn.RemoteAddr().String())
 		go func() {
+			defer func() {
+				_ = rawConn.Close()
+			}()
 			s.handleRawConn(rawConn)
-			_ = rawConn.Close()
 			s.log.Debugf("tcp connection closed to: %v", rawConn.RemoteAddr().String())
 		}()
 	}
 
 }
 
-func (s *Server) serverRawPackage(addr netip.AddrPort, buf []byte) {
-
-}
 func (s *Server) serveRawRTP(addr netip.AddrPort, bytes []byte) {
 
 }
@@ -281,5 +253,7 @@ func RegisterHandler(srv *Server, handler Handler) {
 	srv.handler = handler
 }
 func (s *Server) GracefulStop() {
-	_ = s.lis.Close()
+	if s.lis != nil {
+		_ = s.lis.Close()
+	}
 }
