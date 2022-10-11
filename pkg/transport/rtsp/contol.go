@@ -24,6 +24,7 @@ func newTransactionController(chs ...string) TransactionController {
 	tc := &transactionController{
 		rwm: &sync.RWMutex{},
 		txs: map[string]*transaction{},
+		chs: map[string]map[string]*transaction{},
 	}
 	for _, ch := range chs {
 		if len(ch) == 0 {
