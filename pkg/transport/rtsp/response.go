@@ -1,38 +1,22 @@
 package rtsp
 
+import (
+	"bytes"
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+)
+
 type Response interface {
 	SetHeader(key string, value ...string)
 	SetBody(body []byte)
 	SetStatus(status string)
 	SetCode(code uint64)
+	Encoding() []byte
 }
 
 var _ Response = (*response)(nil)
-
-func Err404(res Response) {
-	res.SetStatus("Not Found")
-	res.SetCode(404)
-}
-
-func Err500(res Response) {
-	res.SetStatus("Internal Server Error")
-	res.SetCode(500)
-}
-
-func ErrUnsupportedTransport(res Response) {
-	res.SetStatus("Unsupported Transport")
-	res.SetCode(461)
-}
-
-func ErrMethodNotAllowed(res Response) {
-	res.SetStatus("Method Not Allowed")
-	res.SetCode(405)
-}
-
-func ErrMethodNotValidINThisState(res Response) {
-	res.SetStatus("Method Not Valid in This State")
-	res.SetCode(455)
-}
 
 type response struct {
 	proto   string
@@ -40,6 +24,33 @@ type response struct {
 	status  string
 	headers map[string][]string
 	body    []byte
+}
+
+func (r *response) Encoding() []byte {
+	buf := bytes.Buffer{}
+	buf.WriteString(fmt.Sprintf("%s %s %s\r\n",
+		r.proto, strconv.FormatUint(r.code, 10), r.status))
+	cl := uint64(len(r.body))
+	if cl > 0 {
+		r.SetHeader("Content-Length", strconv.FormatUint(cl, 10))
+	}
+
+	var keys []string
+	for key := range r.headers {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		buf.WriteString(fmt.Sprintf("%s: %s\r\n", key,
+			strings.Join(r.headers[key], " ")))
+	}
+	buf.WriteString("\r\n")
+
+	if cl > 0 {
+		buf.Write(r.body)
+	}
+	return buf.Bytes()
 }
 
 func (r *response) SetStatus(status string) {

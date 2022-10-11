@@ -1,42 +1,85 @@
 package rtsp
 
-import "sync"
+import (
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
+	"github.com/google/uuid"
+	"sync"
+	"time"
+)
 
-var _ TransactionOperator = (*transactionOperator)(nil)
+var _ TransactionController = (*transactionController)(nil)
 
-type TransactionOperator interface {
-	GetTx(id string) *transaction
-	DeleteTx(id string)
+type TransactionController interface {
+	Create(ch string, trans *transport) *transaction
+	Delete(ch string, id string)
 }
 
-type transactionOperator struct {
-	txs map[string]*transaction
-	rwm sync.RWMutex
+type transactionController struct {
+	chs map[string]map[string]*transaction
+	rwm *sync.RWMutex
 }
 
-func NewTxOperator() TransactionOperator {
-	return &transactionOperator{
-		txs: map[string]*transaction{},
-		rwm: sync.RWMutex{},
+func newTransactionController(chs ...string) TransactionController {
+	tc := &transactionController{
+		chs: map[string]map[string]*transaction{},
+		rwm: &sync.RWMutex{},
 	}
+	for _, ch := range chs {
+		if len(ch) == 0 {
+			continue
+		}
+		tc.chs[ch] = make(map[string]*transaction)
+	}
+	return tc
 }
 
-func (t *transactionOperator) GetTx(id string) *transaction {
-	t.rwm.RLock()
-	tx, ok := t.txs[id]
-	t.rwm.RUnlock()
-	if ok {
-		return tx
-	}
-	tx = newTransaction()
+func (t *transactionController) Create(ch string, trans *transport) *transaction {
+	tx := newTx(trans)
 	t.rwm.Lock()
-	t.txs[tx.id] = tx
-	t.rwm.Unlock()
+	defer t.rwm.Unlock()
+	txg, ok := t.chs[ch]
+	if ok {
+		txg[tx.id] = tx
+	} else {
+		t.chs[ch] = map[string]*transaction{tx.id: tx}
+	}
 	return tx
 }
 
-func (t *transactionOperator) DeleteTx(id string) {
+func (t *transactionController) Delete(ch string, id string) {
+	// remove from collection.
 	t.rwm.Lock()
-	defer t.rwm.Unlock()
-	delete(t.txs, id)
+	txg, ok := t.chs[ch]
+	if !ok {
+		return
+	}
+	c, ok := txg[id]
+	if !ok {
+		return
+	}
+	delete(txg, id)
+	t.rwm.Unlock()
+
+	// clear and reclaim.
+	c.Close()
+	putTx(c)
+}
+
+var txPool = &sync.Pool{}
+
+func newTx(trans *transport) *transaction {
+	id, _ := uuid.NewUUID()
+	tx := txPool.Get().(*transaction)
+	tx.id = id.String()
+	tx.transport = trans
+	return tx
+}
+
+func putTx(tx *transaction) {
+	tx.id = ""
+	tx.state = status.INIT
+	tx.interleaved = false
+	tx.timeout = 3 * time.Second
+	tx.transport = nil
+	txPool.Put(tx)
 }

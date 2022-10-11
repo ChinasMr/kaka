@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/methods"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"io"
 	"net"
 	"net/netip"
@@ -25,7 +26,8 @@ type Server struct {
 	log      *log.Helper
 	handlers map[methods.Method]HandlerFunc
 	mutex    sync.Mutex
-	txs      TransactionOperator
+	chs      []string
+	tc       TransactionController
 }
 
 func NewServer(opts ...ServerOption) *Server {
@@ -36,11 +38,11 @@ func NewServer(opts ...ServerOption) *Server {
 		rtcp:     ":30001",
 		mutex:    sync.Mutex{},
 		handlers: map[methods.Method]HandlerFunc{},
-		txs:      NewTxOperator(),
 	}
 	for _, o := range opts {
 		o(srv)
 	}
+	srv.tc = newTransactionController(srv.chs...)
 	srv.RegisterHandler(methods.OPTIONS, unimplementedServerHandler.OPTIONS)
 	srv.RegisterHandler(methods.DESCRIBE, unimplementedServerHandler.DESCRIBE)
 	srv.RegisterHandler(methods.ANNOUNCE, unimplementedServerHandler.ANNOUNCE)
@@ -132,11 +134,9 @@ func (s *Server) serve() error {
 			s.log.Errorf("can not accept new connection: %v", err)
 			return err
 		}
-		s.log.Debugf("new tcp connection created from: %v", rawConn.RemoteAddr().String())
+
 		go func() {
-			defer func() {
-				_ = rawConn.Close()
-			}()
+			s.log.Debugf("new tcp connection created from: %v", rawConn.RemoteAddr().String())
 			s.handleRawConn(rawConn)
 			s.log.Debugf("tcp connection closed to: %v", rawConn.RemoteAddr().String())
 		}()
@@ -151,21 +151,42 @@ func (s *Server) serveRawRTCP(addr netip.AddrPort, bytes []byte) {
 
 }
 func (s *Server) handleRawConn(conn net.Conn) {
-	tc := NewTcpTransport(conn)
+
+	var (
+		tx    *transaction
+		res   *response
+		once  = sync.Once{}
+		trans = newTransport(conn)
+	)
+
 	for {
-		req, err := tc.parseRequest()
+		req, err := trans.Parse()
 		if err != nil {
-			if err == io.EOF {
-				continue
-			}
 			s.log.Errorf("can not parse rtsp request: %v", err)
-			return
+			continue
 		}
-		// todo remove the log print.
-		s.log.Debugf("%s request from %s", req.Method(), tc.Addr().String())
-		err = s.handleRequest(req, tc)
+		s.log.Debugf("%s request from %s", req.method, trans.Addr())
+
+		// create a corresponding response.
+		res = NewResponse(req.proto, req.cSeq)
+
+		// check presentation description or media path.
+		if len(req.Path()) <= 1 {
+			ErrNotFound(res)
+			_ = trans.Write(res.Encoding())
+			continue
+		}
+
+		// create the transaction.
+		once.Do(func() {
+			tx = s.tc.Create(req.Channel(), trans)
+		})
+
+		// handle the request.
+		err = s.handleRequest(req, res, tx)
 		if err != nil {
 			if err == io.EOF {
+				s.tc.Delete(req.Channel(), tx.id)
 				return
 			}
 			s.log.Errorf("can not handle request: %v", err)
@@ -173,81 +194,52 @@ func (s *Server) handleRawConn(conn net.Conn) {
 	}
 }
 
-func (s *Server) handleRequest(req *request, trans Transport) error {
-	var (
-		res = NewResponse(req.proto, req.cSeq)
-	)
-	// check presentation description or media path.
-	if len(req.Path()) <= 0 {
-		Err500(res)
-		return trans.SendResponse(res)
+func (s *Server) handleRequest(req *request, res *response, tx *transaction) error {
+	// try to get the handle function.
+	handlerFunc, ok := s.handlers[req.method]
+	if !ok {
+		ErrMethodNotAllowed(res)
+		return tx.Response(res)
 	}
 
-	// stateless functions.
-	if req.method == methods.OPTIONS ||
-		req.method == methods.DESCRIBE ||
-		req.method == methods.ANNOUNCE {
-		handlerFunc, ok := s.handlers[req.method]
-		if !ok {
-			ErrMethodNotAllowed(res)
-			return trans.SendResponse(res)
+	if req.method == methods.SETUP {
+		// check state, buf every state can call the setup.
+		// get transports header.
+		transports, has := req.Transport()
+		if !has {
+			ErrUnsupportedTransport(res)
+			return tx.Response(res)
 		}
-		// auto send response.
-		handlerFunc(req, res, nil)
-		return nil
-	} // else if req.method == methods.SETUP {
-	//	// check state, buf every state can call the setup.
-	//	// get transports header.
-	//	transports, ok := req.Transport()
-	//	if !ok {
-	//		ErrUnsupportedTransport(res)
-	//		return trans.SendResponse(res)
-	//	}
-	//
-	//	// disabled multicast.
-	//	ok = transports.Has("unicast")
-	//	if !ok {
-	//		ErrUnsupportedTransport(res)
-	//		return trans.SendResponse(res)
-	//	}
-	//
-	//	// get tx
-	//	tx := s.txs.GetTx(req.SessionID())
-	//	// refresh the transport
-	//	tx.trans = trans
-	//	// handle request
-	//	return s.handler.SETUP(req, res, tx)
-	//} else if req.method == methods.RECORD {
-	//	tx := s.txs.GetTx(req.SessionID())
-	//	// state check
-	//	if tx.state != status.READY && tx.state != status.RECORDING {
-	//		ErrMethodNotValidINThisState(res)
-	//		return trans.SendResponse(res)
-	//	}
-	//	// refresh the transport
-	//	tx.trans = trans
-	//	// handle request
-	//	return s.handler.RECORD(req, res, tx)
-	//} else if req.method == methods.PLAY {
-	//	tx := s.txs.GetTx(req.SessionID())
-	//	// state check
-	//	if tx.state != status.READY && tx.state != status.PLAYING {
-	//		ErrMethodNotValidINThisState(res)
-	//		return trans.SendResponse(res)
-	//	}
-	//	// refresh the transport
-	//	tx.trans = trans
-	//	// handle request
-	//	return s.handler.PLAY(req, res, tx)
-	//} else if req.method == methods.TEARDOWN || req.method == methods.DOWN {
-	//	tx := s.txs.GetTx(req.SessionID())
-	//	tx.trans = trans
-	//	// state check, you can call teardown anytime.
-	//	return s.handler.TEARDOWN(req, res, tx)
-	//} else {
-	//	ErrMethodNotAllowed(res)
-	//	return trans.SendResponse(res)
-	//}
+
+		// disabled multicast.
+		has = transports.Has("unicast")
+		if !has {
+			ErrUnsupportedTransport(res)
+			return tx.Response(res)
+		}
+	}
+
+	if req.method == methods.RECORD {
+		// state check
+		if tx.state != status.READY && tx.state != status.RECORDING {
+			ErrMethodNotValidINThisState(res)
+			return tx.Response(res)
+		}
+	}
+
+	// state check
+	if req.method == methods.PLAY {
+		if tx.state != status.READY && tx.state != status.PLAYING {
+			ErrMethodNotValidINThisState(res)
+			return tx.Response(res)
+		}
+	}
+
+	if req.method == methods.TEARDOWN || req.Method() == methods.DOWN {
+		return io.EOF
+	}
+
+	handlerFunc(req, res, tx)
 	return nil
 }
 

@@ -5,12 +5,12 @@ import (
 	"github.com/ChinasMr/kaka/internal/service"
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp"
-	"github.com/ChinasMr/kaka/pkg/transport/rtsp/methods"
 )
 
 func NewRTSPServer(c *conf.Server, kaka *service.KakaService, logger log.Logger) *rtsp.Server {
 	var opts = []rtsp.ServerOption{
 		rtsp.Logger(logger),
+		rtsp.Channel("live"),
 	}
 	if c.Rtsp.Addr != "" {
 		opts = append(opts, rtsp.Address(c.Rtsp.Addr))
@@ -27,7 +27,8 @@ func NewRTSPServer(c *conf.Server, kaka *service.KakaService, logger log.Logger)
 	if c.Rtsp.Timeout != nil {
 		opts = append(opts, rtsp.Timeout(c.Rtsp.Timeout.AsDuration()))
 	}
+
 	srv := rtsp.NewServer(opts...)
-	srv.RegisterHandler(methods.ANNOUNCE, kaka.ANNOUNCE)
+	//srv.RegisterHandler(methods.ANNOUNCE, kaka.ANNOUNCE)
 	return srv
 }

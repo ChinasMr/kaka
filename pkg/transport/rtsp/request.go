@@ -92,3 +92,12 @@ func (r request) Headers() map[string][]string {
 func (r request) Method() methods.Method {
 	return r.method
 }
+
+func (r request) Channel() string {
+	str := strings.TrimLeft(r.Path(), "/")
+	index := strings.Index(str, "/")
+	if index != -1 {
+		return str[:index]
+	}
+	return str
+}
