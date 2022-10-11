@@ -1,17 +1,38 @@
 syntax = "proto3";
 
 package api.kaka.v1;
-
 option go_package = "kaka/api/kaka/v1;v1";
+import "google/api/annotations.proto";
 
 service Kaka {
-  rpc Debug(DebugRequest) returns (DebugReply) {}
+  rpc Debug(DebugRequest) returns (DebugReply) {
+    option (google.api.http) = {
+      get: "/api/v1/debug"
+    };
+  }
 }
 
+
+message Stream {
+  uint32 id = 1;
+}
+
+message Session {
+  string id = 1;
+  string addr = 2;
+  bool interleaved = 3;
+  string status = 4;
+  uint32 rx = 5;
+  uint32 tx = 6;
+  repeated Stream streams = 7;
+}
+
+message Channel {
+  string id = 1;
+  Session source = 2;
+  repeated Session clients = 3;
+}
 message DebugRequest {}
 message DebugReply {
-  string id = 1;
-  string name = 2;
-  string version = 3;
-  map<string, string> metadata = 4;
+  repeated Channel channels = 1;
 }

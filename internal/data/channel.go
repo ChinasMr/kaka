@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/ChinasMr/kaka/internal/biz"
 	"github.com/ChinasMr/kaka/pkg/log"
-	"github.com/ChinasMr/kaka/pkg/transport/rtsp"
 	"sync"
 )
 
@@ -15,6 +14,16 @@ type channelRepo struct {
 	log      *log.Helper
 	channels map[string]*biz.Channel
 	rwm      sync.RWMutex
+}
+
+func (r *channelRepo) List(ctx context.Context) ([]*biz.Channel, error) {
+	rv := make([]*biz.Channel, 0, len(r.channels))
+	r.rwm.RLock()
+	defer r.rwm.RUnlock()
+	for _, p := range r.channels {
+		rv = append(rv, p)
+	}
+	return rv, nil
 }
 
 func (r *channelRepo) Get(_ context.Context, id string) (*biz.Channel, error) {
@@ -35,10 +44,10 @@ func (r *channelRepo) Delete(_ context.Context, id string) error {
 }
 
 func (r *channelRepo) Create(_ context.Context, id string) (*biz.Channel, error) {
-	ch := make(chan *rtsp.Package)
+
 	nc := &biz.Channel{
 		Id:        id,
-		Terminals: biz.NewTerminalsOperator(ch),
+		Terminals: biz.NewTerminalsOperator(),
 		SDP:       nil,
 		RawSDP:    nil,
 	}

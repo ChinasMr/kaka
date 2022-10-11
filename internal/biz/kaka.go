@@ -3,6 +3,7 @@ package biz
 import (
 	"context"
 	"github.com/ChinasMr/kaka/pkg/log"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp"
 	"github.com/google/uuid"
 	"gortc.io/sdp"
 	"sync"
@@ -10,6 +11,7 @@ import (
 
 type Channel struct {
 	Id        string
+	Source    rtsp.Transaction
 	Terminals TerminalsOperator
 	SDP       *sdp.Message
 	RawSDP    []byte
@@ -20,6 +22,7 @@ type ChannelRepo interface {
 	Create(ctx context.Context, id string) (*Channel, error)
 	Get(ctx context.Context, id string) (*Channel, error)
 	Delete(ctx context.Context, id string) error
+	List(ctx context.Context) ([]*Channel, error)
 }
 
 type KakaUseCase struct {
@@ -57,4 +60,8 @@ func (uc *KakaUseCase) SetChannelPresentationDescription(ctx context.Context, id
 	p.RawSDP = raw
 	p.mu.Unlock()
 	return nil
+}
+
+func (uc *KakaUseCase) ListChannels(ctx context.Context) ([]*Channel, error) {
+	return uc.channel.List(ctx)
 }

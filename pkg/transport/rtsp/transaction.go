@@ -4,14 +4,10 @@ import (
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"github.com/google/uuid"
 	"sync"
+	"time"
 )
 
 var _ Transaction = (*transaction)(nil)
-
-type Package struct {
-	Ch   int
-	Data []byte
-}
 
 type Transaction interface {
 	ID() string
@@ -22,44 +18,8 @@ type Transaction interface {
 	SetInterleaved()
 	Medias() int
 	Transport() Transport
-	Forward(data *Package) error
-}
-
-type TransactionOperator interface {
-	GetTx(id string) *transaction
-	DeleteTx(id string)
-}
-
-type transactionOperator struct {
-	txs map[string]*transaction
-	rwm sync.RWMutex
-}
-
-func NewTxOperator() TransactionOperator {
-	return &transactionOperator{
-		txs: map[string]*transaction{},
-		rwm: sync.RWMutex{},
-	}
-}
-
-func (t *transactionOperator) GetTx(id string) *transaction {
-	t.rwm.RLock()
-	tx, ok := t.txs[id]
-	t.rwm.RUnlock()
-	if ok {
-		return tx
-	}
-	tx = newTransaction()
-	t.rwm.Lock()
-	t.txs[tx.id] = tx
-	t.rwm.Unlock()
-	return tx
-}
-
-func (t *transactionOperator) DeleteTx(id string) {
-	t.rwm.Lock()
-	defer t.rwm.Unlock()
-	delete(t.txs, id)
+	Forward(data *Package, wg *sync.WaitGroup)
+	Close()
 }
 
 type transaction struct {
@@ -68,13 +28,40 @@ type transaction struct {
 	medias      map[string]bool
 	interleaved bool
 	trans       Transport
+	timeout     time.Duration
 }
 
-func (t *transaction) Forward(data *Package) error {
-	if t.interleaved {
-		return t.trans.SendData(data.Ch, data.Data)
+func newTransaction() *transaction {
+	id, _ := uuid.NewUUID()
+	tx := &transaction{
+		id:          id.String(),
+		state:       status.INIT,
+		medias:      map[string]bool{},
+		interleaved: false,
+		trans:       nil,
+		timeout:     3 * time.Second,
 	}
-	return nil
+	go tx.serve()
+	return tx
+}
+
+func (t *transaction) serve() {
+	for {
+
+	}
+}
+
+func (t *transaction) Close() {
+
+}
+
+func (t *transaction) Forward(data *Package, wg *sync.WaitGroup) {
+	go func() {
+		if t.interleaved {
+			_ = t.trans.SendData(data.Ch, data.Data[:data.Len])
+		}
+		wg.Done()
+	}()
 }
 
 func (t *transaction) ID() string {
@@ -107,15 +94,4 @@ func (t *transaction) AddMedia(media string) {
 
 func (t *transaction) Status() status.Status {
 	return t.state
-}
-
-func newTransaction() *transaction {
-	id, _ := uuid.NewUUID()
-	return &transaction{
-		id:          id.String(),
-		state:       status.INIT,
-		medias:      map[string]bool{},
-		interleaved: false,
-		trans:       nil,
-	}
 }
