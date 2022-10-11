@@ -15,7 +15,7 @@ import (
 
 var (
 	Name       = "kaka"
-	Version    = "alpha0.2"
+	Version    = "alpha0.3"
 	flagConfig string
 	id, _      = os.Hostname()
 )
