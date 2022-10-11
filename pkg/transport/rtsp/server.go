@@ -3,8 +3,7 @@ package rtsp
 import (
 	"context"
 	"github.com/ChinasMr/kaka/pkg/log"
-	"github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
-	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/methods"
 	"io"
 	"net"
 	"net/netip"
@@ -24,25 +23,31 @@ type Server struct {
 	timeout  time.Duration
 	baseCtx  context.Context
 	log      *log.Helper
-	handler  Handler
+	handlers map[methods.Method]HandlerFunc
 	mutex    sync.Mutex
 	txs      TransactionOperator
 }
 
 func NewServer(opts ...ServerOption) *Server {
 	srv := &Server{
-		network: "tcp",
-		address: ":0",
-		rtp:     "30000",
-		rtcp:    ":30001",
-		mutex:   sync.Mutex{},
-		handler: &UnimplementedServerHandler{},
-		txs:     NewTxOperator(),
+		network:  "tcp",
+		address:  ":0",
+		rtp:      "30000",
+		rtcp:     ":30001",
+		mutex:    sync.Mutex{},
+		handlers: map[methods.Method]HandlerFunc{},
+		txs:      NewTxOperator(),
 	}
 	for _, o := range opts {
 		o(srv)
 	}
-
+	srv.RegisterHandler(methods.OPTIONS, unimplementedServerHandler.OPTIONS)
+	srv.RegisterHandler(methods.DESCRIBE, unimplementedServerHandler.DESCRIBE)
+	srv.RegisterHandler(methods.ANNOUNCE, unimplementedServerHandler.ANNOUNCE)
+	srv.RegisterHandler(methods.RECORD, unimplementedServerHandler.RECORD)
+	srv.RegisterHandler(methods.PLAY, unimplementedServerHandler.PLAY)
+	srv.RegisterHandler(methods.SETUP, unimplementedServerHandler.SETUP)
+	srv.RegisterHandler(methods.TEARDOWN, unimplementedServerHandler.TEARDOWN)
 	return srv
 }
 func (s *Server) Start(ctx context.Context) error {
@@ -58,19 +63,19 @@ func (s *Server) Start(ctx context.Context) error {
 }
 func (s *Server) Stop(_ context.Context) error {
 	s.GracefulStop()
-	log.Info("[gRPC] server stopping")
+	log.Info("[RTSP] server stopping")
 	return nil
 }
 func (s *Server) listen() error {
-	if s.lis == nil {
-		lis, err := net.Listen(s.network, s.address)
-		if err != nil {
-			s.err = err
-			return err
-		}
-		s.lis = lis
+	// listen rtsp tcp
+	lis, err := net.Listen(s.network, s.address)
+	if err != nil {
+		s.err = err
+		return err
 	}
+	s.lis = lis
 
+	// listen rtp udp.
 	addr, err := net.ResolveUDPAddr("udp", s.rtp)
 	if err != nil {
 		s.err = err
@@ -82,6 +87,8 @@ func (s *Server) listen() error {
 		return err
 	}
 	s.rtpConn = conn
+
+	// listen rtcp udp.
 	addr, err = net.ResolveUDPAddr("udp", s.rtcp)
 	if err != nil {
 		s.err = err
@@ -96,7 +103,6 @@ func (s *Server) listen() error {
 	return s.err
 }
 func (s *Server) serve() error {
-
 	go func() {
 		for true {
 			buf := make([]byte, 2048)
@@ -178,79 +184,77 @@ func (s *Server) handleRequest(req *request, trans Transport) error {
 	}
 
 	// stateless functions.
-	if req.method == method.OPTIONS ||
-		req.method == method.DESCRIBE ||
-		req.method == method.ANNOUNCE {
-		switch req.Method() {
-		case method.OPTIONS:
-			s.handler.OPTIONS(req, res)
-		case method.DESCRIBE:
-			s.handler.DESCRIBE(req, res)
-		case method.ANNOUNCE:
-			s.handler.ANNOUNCE(req, res)
+	if req.method == methods.OPTIONS ||
+		req.method == methods.DESCRIBE ||
+		req.method == methods.ANNOUNCE {
+		handlerFunc, ok := s.handlers[req.method]
+		if !ok {
+			ErrMethodNotAllowed(res)
+			return trans.SendResponse(res)
 		}
 		// auto send response.
-		return trans.SendResponse(res)
-	} else if req.method == method.SETUP {
-		// check state, buf every state can call the setup.
-		// get transports header.
-		transports, ok := req.Transport()
-		if !ok {
-			ErrUnsupportedTransport(res)
-			return trans.SendResponse(res)
-		}
-
-		// disabled multicast.
-		ok = transports.Has("unicast")
-		if !ok {
-			ErrUnsupportedTransport(res)
-			return trans.SendResponse(res)
-		}
-
-		// get tx
-		tx := s.txs.GetTx(req.SessionID())
-		// refresh the transport
-		tx.trans = trans
-		// handle request
-		return s.handler.SETUP(req, res, tx)
-	} else if req.method == method.RECORD {
-		tx := s.txs.GetTx(req.SessionID())
-		// state check
-		if tx.state != status.READY && tx.state != status.RECORDING {
-			ErrMethodNotValidINThisState(res)
-			return trans.SendResponse(res)
-		}
-		// refresh the transport
-		tx.trans = trans
-		// handle request
-		return s.handler.RECORD(req, res, tx)
-	} else if req.method == method.PLAY {
-		tx := s.txs.GetTx(req.SessionID())
-		// state check
-		if tx.state != status.READY && tx.state != status.PLAYING {
-			ErrMethodNotValidINThisState(res)
-			return trans.SendResponse(res)
-		}
-		// refresh the transport
-		tx.trans = trans
-		// handle request
-		return s.handler.PLAY(req, res, tx)
-	} else if req.method == method.TEARDOWN || req.method == method.DOWN {
-		tx := s.txs.GetTx(req.SessionID())
-		tx.trans = trans
-		// state check, you can call teardown anytime.
-		return s.handler.TEARDOWN(req, res, tx)
-	} else {
-		ErrMethodNotAllowed(res)
-		return trans.SendResponse(res)
-	}
+		handlerFunc(req, res, nil)
+		return nil
+	} // else if req.method == methods.SETUP {
+	//	// check state, buf every state can call the setup.
+	//	// get transports header.
+	//	transports, ok := req.Transport()
+	//	if !ok {
+	//		ErrUnsupportedTransport(res)
+	//		return trans.SendResponse(res)
+	//	}
+	//
+	//	// disabled multicast.
+	//	ok = transports.Has("unicast")
+	//	if !ok {
+	//		ErrUnsupportedTransport(res)
+	//		return trans.SendResponse(res)
+	//	}
+	//
+	//	// get tx
+	//	tx := s.txs.GetTx(req.SessionID())
+	//	// refresh the transport
+	//	tx.trans = trans
+	//	// handle request
+	//	return s.handler.SETUP(req, res, tx)
+	//} else if req.method == methods.RECORD {
+	//	tx := s.txs.GetTx(req.SessionID())
+	//	// state check
+	//	if tx.state != status.READY && tx.state != status.RECORDING {
+	//		ErrMethodNotValidINThisState(res)
+	//		return trans.SendResponse(res)
+	//	}
+	//	// refresh the transport
+	//	tx.trans = trans
+	//	// handle request
+	//	return s.handler.RECORD(req, res, tx)
+	//} else if req.method == methods.PLAY {
+	//	tx := s.txs.GetTx(req.SessionID())
+	//	// state check
+	//	if tx.state != status.READY && tx.state != status.PLAYING {
+	//		ErrMethodNotValidINThisState(res)
+	//		return trans.SendResponse(res)
+	//	}
+	//	// refresh the transport
+	//	tx.trans = trans
+	//	// handle request
+	//	return s.handler.PLAY(req, res, tx)
+	//} else if req.method == methods.TEARDOWN || req.method == methods.DOWN {
+	//	tx := s.txs.GetTx(req.SessionID())
+	//	tx.trans = trans
+	//	// state check, you can call teardown anytime.
+	//	return s.handler.TEARDOWN(req, res, tx)
+	//} else {
+	//	ErrMethodNotAllowed(res)
+	//	return trans.SendResponse(res)
+	//}
+	return nil
 }
 
-func RegisterHandler(srv *Server, handler Handler) {
-	if handler == nil {
-		return
-	}
-	srv.handler = handler
+func (s *Server) RegisterHandler(method methods.Method, fn HandlerFunc) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.handlers[method] = fn
 }
 func (s *Server) GracefulStop() {
 	if s.lis != nil {

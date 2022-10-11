@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	method2 "github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
+	method2 "github.com/ChinasMr/kaka/pkg/transport/rtsp/methods"
 	"io"
 	"net"
 	"net/textproto"

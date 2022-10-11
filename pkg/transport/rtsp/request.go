@@ -2,7 +2,7 @@ package rtsp
 
 import (
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/header"
-	"github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/methods"
 	"net/url"
 	"strings"
 )
@@ -10,7 +10,7 @@ import (
 var _ Request = (*request)(nil)
 
 type Request interface {
-	Method() method.Method
+	Method() methods.Method
 	URL() *url.URL
 	Path() string
 	Headers() map[string][]string
@@ -24,7 +24,7 @@ type Request interface {
 }
 
 type request struct {
-	method  method.Method
+	method  methods.Method
 	url     *url.URL
 	headers map[string][]string
 	body    []byte
@@ -89,6 +89,6 @@ func (r request) Headers() map[string][]string {
 	return r.headers
 }
 
-func (r request) Method() method.Method {
+func (r request) Method() methods.Method {
 	return r.method
 }

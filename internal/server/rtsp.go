@@ -5,6 +5,7 @@ import (
 	"github.com/ChinasMr/kaka/internal/service"
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/methods"
 )
 
 func NewRTSPServer(c *conf.Server, kaka *service.KakaService, logger log.Logger) *rtsp.Server {
@@ -27,6 +28,6 @@ func NewRTSPServer(c *conf.Server, kaka *service.KakaService, logger log.Logger)
 		opts = append(opts, rtsp.Timeout(c.Rtsp.Timeout.AsDuration()))
 	}
 	srv := rtsp.NewServer(opts...)
-	rtsp.RegisterHandler(srv, kaka)
+	srv.RegisterHandler(methods.ANNOUNCE, kaka.ANNOUNCE)
 	return srv
 }

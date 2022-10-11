@@ -71,7 +71,7 @@ func (s *KakaService) Debug(ctx context.Context, _ *pb.DebugRequest) (*pb.DebugR
 	}, nil
 }
 
-func (s *KakaService) ANNOUNCE(req rtsp.Request, res rtsp.Response) {
+func (s *KakaService) ANNOUNCE(req rtsp.Request, res rtsp.Response, tx rtsp.Transaction) {
 	s.log.Debugf("announce request from %s", req.URL().String())
 	if req.ContentType() != header.ContentTypeSDP {
 		s.log.Errorf("unsupported presentation description format")
