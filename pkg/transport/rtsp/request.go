@@ -1,8 +1,10 @@
 package rtsp
 
 import (
+	"fmt"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/header"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/methods"
+	"gortc.io/sdp"
 	"net/url"
 	"strings"
 )
@@ -22,6 +24,7 @@ type Request interface {
 	ContentType() string
 	Body() []byte
 	Encode() []byte
+	ParseSDP() (*sdp.Message, error)
 }
 
 type request struct {
@@ -31,6 +34,26 @@ type request struct {
 	body    []byte
 	cSeq    string
 	proto   string
+}
+
+func (r request) ParseSDP() (*sdp.Message, error) {
+	if r.ContentType() != header.ContentTypeSDP {
+		return nil, fmt.Errorf("unsupported presentation description format: %s", r.ContentType())
+	}
+	if len(r.body) == 0 {
+		return nil, fmt.Errorf("paerse sdp error empty request body")
+	}
+	s, err := sdp.DecodeSession(r.body, nil)
+	if err != nil {
+		return nil, err
+	}
+	rv := &sdp.Message{}
+	d := sdp.NewDecoder(s)
+	err = d.Decode(rv)
+	if err != nil {
+		return nil, err
+	}
+	return rv, nil
 }
 
 func (r request) Encode() []byte {

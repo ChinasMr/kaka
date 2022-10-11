@@ -7,7 +7,6 @@ import (
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
-	"gortc.io/sdp"
 )
 
 type KakaService struct {
@@ -70,11 +69,7 @@ func (s *KakaService) Debug(ctx context.Context, _ *pb.DebugRequest) (*pb.DebugR
 
 func (s *KakaService) ANNOUNCE(req rtsp.Request, res rtsp.Response, tx rtsp.Transaction) {
 	//s.log.Debugf("announce request from %s", req.URL().String())
-	//if req.ContentType() != header.ContentTypeSDP {
-	//	s.log.Errorf("unsupported presentation description format")
-	//	rtsp.Err500(res)
-	//	return
-	//}
+
 	//message, err := decodeSDP(req.Body())
 	//if err != nil {
 	//	s.log.Errorf("can not decode sdp: %v", err)
@@ -276,23 +271,6 @@ func (s *KakaService) TEARDOWN(req rtsp.Request, res rtsp.Response, tx rtsp.Tran
 	//_ = tx.Transport().SendResponse(res)
 	//// todo clear serve resources.
 	return nil
-}
-
-// parse the channel id from path.
-
-// parse the sdp message from bytes.
-func decodeSDP(content []byte) (*sdp.Message, error) {
-	s, err := sdp.DecodeSession(content, nil)
-	if err != nil {
-		return nil, err
-	}
-	rv := &sdp.Message{}
-	d := sdp.NewDecoder(s)
-	err = d.Decode(rv)
-	if err != nil {
-		return nil, err
-	}
-	return rv, nil
 }
 
 // get session status.

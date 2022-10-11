@@ -35,13 +35,21 @@ type UnimplementedServerHandler struct {
 }
 
 func (u *UnimplementedServerHandler) OPTIONS(req Request, res Response, tx Transaction) error {
-	log.Debugf("options request from: %s", req.URL().String())
+	log.Debugf("options request url: %s", req.URL().String())
 	res.SetHeader(header.Public, strings.Join(u.hs, ", "))
 	return tx.Response(res)
 }
 
 func (u *UnimplementedServerHandler) ANNOUNCE(req Request, res Response, tx Transaction) error {
-	panic("implement me")
+	log.Debugf("announce request url: %s", req.URL().String())
+	sdp, err := req.ParseSDP()
+	if err != nil {
+		return err
+	}
+
+	// todo channel controller
+	log.Debugf("source %s has media: %d", req.URL().String(), len(sdp.Medias))
+	return tx.Response(res)
 }
 
 func (u *UnimplementedServerHandler) DESCRIBE(req Request, res Response, tx Transaction) error {
