@@ -9,8 +9,8 @@ import (
 
 func NewRTSPServer(c *conf.Server, kaka *service.KakaService, logger log.Logger) *rtsp.Server {
 	var opts = []rtsp.ServerOption{
-		rtsp.Logger(logger),
 		rtsp.Channel("live"),
+		rtsp.Logger(logger),
 	}
 	if c.Rtsp.Addr != "" {
 		opts = append(opts, rtsp.Address(c.Rtsp.Addr))

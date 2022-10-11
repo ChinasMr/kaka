@@ -10,19 +10,20 @@ import (
 var _ TransactionController = (*transactionController)(nil)
 
 type TransactionController interface {
-	Create(ch string, trans *transport) *transaction
-	Delete(ch string, id string)
+	Create(trans *transport) *transaction
+	Delete(id string)
 }
 
 type transactionController struct {
 	chs map[string]map[string]*transaction
+	txs map[string]*transaction
 	rwm *sync.RWMutex
 }
 
 func newTransactionController(chs ...string) TransactionController {
 	tc := &transactionController{
-		chs: map[string]map[string]*transaction{},
 		rwm: &sync.RWMutex{},
+		txs: map[string]*transaction{},
 	}
 	for _, ch := range chs {
 		if len(ch) == 0 {
@@ -33,39 +34,27 @@ func newTransactionController(chs ...string) TransactionController {
 	return tc
 }
 
-func (t *transactionController) Create(ch string, trans *transport) *transaction {
+func (t *transactionController) Create(trans *transport) *transaction {
 	tx := newTx(trans)
 	t.rwm.Lock()
-	defer t.rwm.Unlock()
-	txg, ok := t.chs[ch]
-	if ok {
-		txg[tx.id] = tx
-	} else {
-		t.chs[ch] = map[string]*transaction{tx.id: tx}
-	}
+	t.txs[tx.id] = tx
+	t.rwm.Unlock()
 	return tx
 }
 
-func (t *transactionController) Delete(ch string, id string) {
-	// remove from collection.
+func (t *transactionController) Delete(id string) {
 	t.rwm.Lock()
-	txg, ok := t.chs[ch]
+	tx, ok := t.txs[id]
 	if !ok {
 		return
 	}
-	c, ok := txg[id]
-	if !ok {
-		return
-	}
-	delete(txg, id)
+	delete(t.txs, tx.id)
 	t.rwm.Unlock()
-
-	// clear and reclaim.
-	_ = c.Close()
-	putTx(c)
+	_ = tx.Close()
+	putTx(tx)
 }
 
-var txPool = &sync.Pool{}
+var txPool = &sync.Pool{New: func() any { return &transaction{} }}
 
 func newTx(trans *transport) *transaction {
 	id, _ := uuid.NewUUID()

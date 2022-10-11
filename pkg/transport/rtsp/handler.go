@@ -3,7 +3,6 @@ package rtsp
 import (
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/header"
-	"github.com/ChinasMr/kaka/pkg/transport/rtsp/methods"
 	"strings"
 )
 
@@ -20,7 +19,7 @@ type HandlerFunc func(req Request, res Response, tx Transaction) error
 // minimal recording server). If RECORD is implemented, ANNOUNCE
 // should be implemented as well.
 
-type miniHandler interface {
+type minimalHandler interface {
 	OPTIONS(req Request, res Response, tx Transaction) error
 	DESCRIBE(req Request, res Response, tx Transaction) error
 	ANNOUNCE(req Request, res Response, tx Transaction) error
@@ -30,24 +29,15 @@ type miniHandler interface {
 	TEARDOWN(req Request, res Response, tx Transaction) error
 }
 
-var unimplementedServerHandler miniHandler = &UnimplementedServerHandler{}
-
 type UnimplementedServerHandler struct {
+	tc TransactionController
+	hs []string
 }
 
 func (u *UnimplementedServerHandler) OPTIONS(req Request, res Response, tx Transaction) error {
 	log.Debugf("options request from: %s", req.URL().String())
-	method := strings.Join([]string{
-		methods.DESCRIBE.String(),
-		methods.ANNOUNCE.String(),
-		methods.SETUP.String(),
-		methods.PLAY.String(),
-		methods.PAUSE.String(),
-		methods.RECORD.String(),
-		methods.TEARDOWN.String(),
-	}, ", ")
-	res.SetHeader(header.Public, method)
-	return nil
+	res.SetHeader(header.Public, strings.Join(u.hs, ", "))
+	return tx.Response(res)
 }
 
 func (u *UnimplementedServerHandler) ANNOUNCE(req Request, res Response, tx Transaction) error {

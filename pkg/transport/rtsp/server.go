@@ -13,21 +13,22 @@ import (
 )
 
 type Server struct {
-	network  string
-	address  string
-	rtp      string
-	rtcp     string
-	lis      net.Listener
-	rtpConn  *net.UDPConn
-	rtcpConn *net.UDPConn
-	err      error
-	timeout  time.Duration
-	baseCtx  context.Context
-	log      *log.Helper
-	handlers map[methods.Method]HandlerFunc
-	mutex    sync.Mutex
-	chs      []string
-	tc       TransactionController
+	network          string
+	address          string
+	rtp              string
+	rtcp             string
+	lis              net.Listener
+	rtpConn          *net.UDPConn
+	rtcpConn         *net.UDPConn
+	err              error
+	timeout          time.Duration
+	baseCtx          context.Context
+	log              *log.Helper
+	handlers         map[methods.Method]HandlerFunc
+	handlerFunctions []string
+	mutex            sync.Mutex
+	chs              []string
+	tc               TransactionController
 }
 
 func NewServer(opts ...ServerOption) *Server {
@@ -38,19 +39,16 @@ func NewServer(opts ...ServerOption) *Server {
 		rtcp:     ":30001",
 		mutex:    sync.Mutex{},
 		handlers: map[methods.Method]HandlerFunc{},
+		log:      log.NewHelper(log.DefaultLogger),
 	}
 	for _, o := range opts {
 		o(srv)
 	}
 	srv.tc = newTransactionController(srv.chs...)
-	srv.RegisterHandler(methods.OPTIONS, unimplementedServerHandler.OPTIONS)
-	srv.RegisterHandler(methods.DESCRIBE, unimplementedServerHandler.DESCRIBE)
-	srv.RegisterHandler(methods.ANNOUNCE, unimplementedServerHandler.ANNOUNCE)
-	srv.RegisterHandler(methods.RECORD, unimplementedServerHandler.RECORD)
-	srv.RegisterHandler(methods.PLAY, unimplementedServerHandler.PLAY)
-	srv.RegisterHandler(methods.SETUP, unimplementedServerHandler.SETUP)
-	srv.RegisterHandler(methods.TEARDOWN, unimplementedServerHandler.TEARDOWN)
-	srv.RegisterHandler(methods.DOWN, unimplementedServerHandler.TEARDOWN)
+	srv.RegisterHandler(&UnimplementedServerHandler{
+		tc: srv.tc,
+		hs: srv.handlerFunctions,
+	})
 	return srv
 }
 func (s *Server) Start(ctx context.Context) error {
@@ -128,7 +126,6 @@ func (s *Server) serve() error {
 		}
 	}()
 
-	// serve tcp
 	for {
 		rawConn, err := s.lis.Accept()
 		if err != nil {
@@ -155,12 +152,20 @@ func (s *Server) handleRawConn(conn net.Conn) {
 	var (
 		tx    *transaction
 		res   *response
-		once  = sync.Once{}
+		once  = &sync.Once{}
 		trans = newTransport(conn)
 	)
+	defer func() {
+		if tx != nil {
+			s.tc.Delete(tx.id)
+		}
+	}()
 	for {
 		req, err := trans.Parse()
 		if err != nil {
+			if err == io.EOF {
+				return
+			}
 			s.log.Errorf("can not parse rtsp request: %v", err)
 			continue
 		}
@@ -175,13 +180,13 @@ func (s *Server) handleRawConn(conn net.Conn) {
 		}
 		// create the transaction.
 		once.Do(func() {
-			tx = s.tc.Create(req.Channel(), trans)
+			tx = s.tc.Create(trans)
+			s.log.Errorf("create new session for %s: %s", trans.Addr(), tx.id)
 		})
 		// handle the request.
 		err = s.handleRequest(req, res, tx)
 		if err != nil {
 			if err == io.EOF {
-				s.tc.Delete(req.Channel(), tx.id)
 				return
 			}
 			s.log.Errorf("can not handle request: %v", err)
@@ -211,7 +216,11 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 			ErrUnsupportedTransport(res)
 			return tx.Response(res)
 		}
-		return handlerFunc(req, res, tx)
+		err := handlerFunc(req, res, tx)
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 
 	if req.method == methods.RECORD {
@@ -240,10 +249,21 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 	return handlerFunc(req, res, tx)
 }
 
-func (s *Server) RegisterHandler(method methods.Method, fn HandlerFunc) {
+func (s *Server) RegisterHandleFunc(method methods.Method, fn HandlerFunc) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.handlers[method] = fn
+	s.handlerFunctions = append(s.handlerFunctions, method.String())
+}
+func (s *Server) RegisterHandler(handler minimalHandler) {
+	s.RegisterHandleFunc(methods.OPTIONS, handler.OPTIONS)
+	s.RegisterHandleFunc(methods.DESCRIBE, handler.DESCRIBE)
+	s.RegisterHandleFunc(methods.ANNOUNCE, handler.ANNOUNCE)
+	s.RegisterHandleFunc(methods.RECORD, handler.RECORD)
+	s.RegisterHandleFunc(methods.PLAY, handler.PLAY)
+	s.RegisterHandleFunc(methods.SETUP, handler.SETUP)
+	s.RegisterHandleFunc(methods.TEARDOWN, handler.TEARDOWN)
+	s.RegisterHandleFunc(methods.DOWN, handler.TEARDOWN)
 }
 func (s *Server) GracefulStop() {
 	if s.lis != nil {
