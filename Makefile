@@ -1,5 +1,6 @@
 INTERNAL_PROTO_FILES=$(shell find internal -name *.proto)
 API_PROTO_FILES=$(shell find api -name *.proto)
+VERSION=$(shell git describe --tags --always)
 
 .PHONY: init
 # init env
@@ -27,3 +28,9 @@ api:
  	       --go-http_out=paths=source_relative:./api \
  	       --go-grpc_out=paths=source_relative:./api \
 	       $(API_PROTO_FILES)
+
+
+.PHONY: build
+# build
+build:
+	mkdir -p bin/ && go build -ldflags "-X main.Version=$(VERSION)" -o ./bin/ ./...
