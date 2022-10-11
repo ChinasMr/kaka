@@ -61,7 +61,7 @@ func (t *transactionController) Delete(ch string, id string) {
 	t.rwm.Unlock()
 
 	// clear and reclaim.
-	c.Close()
+	_ = c.Close()
 	putTx(c)
 }
 

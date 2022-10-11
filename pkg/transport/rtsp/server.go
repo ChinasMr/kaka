@@ -50,6 +50,7 @@ func NewServer(opts ...ServerOption) *Server {
 	srv.RegisterHandler(methods.PLAY, unimplementedServerHandler.PLAY)
 	srv.RegisterHandler(methods.SETUP, unimplementedServerHandler.SETUP)
 	srv.RegisterHandler(methods.TEARDOWN, unimplementedServerHandler.TEARDOWN)
+	srv.RegisterHandler(methods.DOWN, unimplementedServerHandler.TEARDOWN)
 	return srv
 }
 func (s *Server) Start(ctx context.Context) error {
@@ -151,14 +152,12 @@ func (s *Server) serveRawRTCP(addr netip.AddrPort, bytes []byte) {
 
 }
 func (s *Server) handleRawConn(conn net.Conn) {
-
 	var (
 		tx    *transaction
 		res   *response
 		once  = sync.Once{}
 		trans = newTransport(conn)
 	)
-
 	for {
 		req, err := trans.Parse()
 		if err != nil {
@@ -166,22 +165,18 @@ func (s *Server) handleRawConn(conn net.Conn) {
 			continue
 		}
 		s.log.Debugf("%s request from %s", req.method, trans.Addr())
-
 		// create a corresponding response.
 		res = NewResponse(req.proto, req.cSeq)
-
 		// check presentation description or media path.
 		if len(req.Path()) <= 1 {
 			ErrNotFound(res)
 			_ = trans.Write(res.Encoding())
 			continue
 		}
-
 		// create the transaction.
 		once.Do(func() {
 			tx = s.tc.Create(req.Channel(), trans)
 		})
-
 		// handle the request.
 		err = s.handleRequest(req, res, tx)
 		if err != nil {
@@ -201,7 +196,6 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 		ErrMethodNotAllowed(res)
 		return tx.Response(res)
 	}
-
 	if req.method == methods.SETUP {
 		// check state, buf every state can call the setup.
 		// get transports header.
@@ -217,6 +211,7 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 			ErrUnsupportedTransport(res)
 			return tx.Response(res)
 		}
+		return handlerFunc(req, res, tx)
 	}
 
 	if req.method == methods.RECORD {
@@ -225,6 +220,7 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 			ErrMethodNotValidINThisState(res)
 			return tx.Response(res)
 		}
+		return handlerFunc(req, res, tx)
 	}
 
 	// state check
@@ -233,14 +229,15 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 			ErrMethodNotValidINThisState(res)
 			return tx.Response(res)
 		}
+		return handlerFunc(req, res, tx)
 	}
 
 	if req.method == methods.TEARDOWN || req.Method() == methods.DOWN {
+		_ = handlerFunc(req, res, tx)
 		return io.EOF
 	}
 
-	handlerFunc(req, res, tx)
-	return nil
+	return handlerFunc(req, res, tx)
 }
 
 func (s *Server) RegisterHandler(method methods.Method, fn HandlerFunc) {

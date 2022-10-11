@@ -19,6 +19,7 @@ type Transaction interface {
 	SetInterleaved()
 	Forward(data *Package, wg *sync.WaitGroup)
 	Response(res Response) error
+	Request(req Request) error
 	Close() error
 }
 
@@ -28,6 +29,10 @@ type transaction struct {
 	interleaved bool
 	timeout     time.Duration
 	transport   Transport
+}
+
+func (t *transaction) Request(req Request) error {
+	return t.transport.Write(req.Encode())
 }
 
 func (t *transaction) Response(res Response) error {

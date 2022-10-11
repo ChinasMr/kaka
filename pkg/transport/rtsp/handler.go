@@ -12,7 +12,7 @@ import (
 // the allocation and usage of stream resources on the server:
 // SETUP, PLAY, RECORD, PAUSE, and TEARDOWN.
 
-type HandlerFunc func(req Request, res Response, tx Transaction)
+type HandlerFunc func(req Request, res Response, tx Transaction) error
 
 // A minimal server implementation MUST be able to do the following:
 // Implement the following methods: SETUP, TEARDOWN, OPTIONS and
@@ -21,13 +21,13 @@ type HandlerFunc func(req Request, res Response, tx Transaction)
 // should be implemented as well.
 
 type miniHandler interface {
-	OPTIONS(req Request, res Response, tx Transaction)
-	DESCRIBE(req Request, res Response, tx Transaction)
-	ANNOUNCE(req Request, res Response, tx Transaction)
-	SETUP(req Request, res Response, tx Transaction)
-	RECORD(req Request, res Response, tx Transaction)
-	PLAY(req Request, res Response, tx Transaction)
-	TEARDOWN(req Request, res Response, tx Transaction)
+	OPTIONS(req Request, res Response, tx Transaction) error
+	DESCRIBE(req Request, res Response, tx Transaction) error
+	ANNOUNCE(req Request, res Response, tx Transaction) error
+	SETUP(req Request, res Response, tx Transaction) error
+	RECORD(req Request, res Response, tx Transaction) error
+	PLAY(req Request, res Response, tx Transaction) error
+	TEARDOWN(req Request, res Response, tx Transaction) error
 }
 
 var unimplementedServerHandler miniHandler = &UnimplementedServerHandler{}
@@ -35,7 +35,7 @@ var unimplementedServerHandler miniHandler = &UnimplementedServerHandler{}
 type UnimplementedServerHandler struct {
 }
 
-func (u *UnimplementedServerHandler) OPTIONS(req Request, res Response, tx Transaction) {
+func (u *UnimplementedServerHandler) OPTIONS(req Request, res Response, tx Transaction) error {
 	log.Debugf("options request from: %s", req.URL().String())
 	method := strings.Join([]string{
 		methods.DESCRIBE.String(),
@@ -47,29 +47,29 @@ func (u *UnimplementedServerHandler) OPTIONS(req Request, res Response, tx Trans
 		methods.TEARDOWN.String(),
 	}, ", ")
 	res.SetHeader(header.Public, method)
-	return
+	return nil
 }
 
-func (u *UnimplementedServerHandler) ANNOUNCE(req Request, res Response, tx Transaction) {
+func (u *UnimplementedServerHandler) ANNOUNCE(req Request, res Response, tx Transaction) error {
 	panic("implement me")
 }
 
-func (u *UnimplementedServerHandler) DESCRIBE(req Request, res Response, tx Transaction) {
+func (u *UnimplementedServerHandler) DESCRIBE(req Request, res Response, tx Transaction) error {
 	panic("implement me")
 }
 
-func (u *UnimplementedServerHandler) SETUP(req Request, res Response, tx Transaction) {
+func (u *UnimplementedServerHandler) SETUP(req Request, res Response, tx Transaction) error {
 	panic("implement me")
 }
 
-func (u *UnimplementedServerHandler) PLAY(req Request, res Response, tx Transaction) {
+func (u *UnimplementedServerHandler) PLAY(req Request, res Response, tx Transaction) error {
 	panic("implement me")
 }
 
-func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transaction) {
+func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transaction) error {
 	panic("implement me")
 }
 
-func (u *UnimplementedServerHandler) TEARDOWN(req Request, res Response, tx Transaction) {
+func (u *UnimplementedServerHandler) TEARDOWN(req Request, res Response, tx Transaction) error {
 	panic("implement me")
 }

@@ -21,6 +21,7 @@ type Request interface {
 	SessionID() string
 	ContentType() string
 	Body() []byte
+	Encode() []byte
 }
 
 type request struct {
@@ -30,6 +31,11 @@ type request struct {
 	body    []byte
 	cSeq    string
 	proto   string
+}
+
+func (r request) Encode() []byte {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (r request) ContentType() string {
