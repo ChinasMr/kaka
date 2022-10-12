@@ -30,6 +30,8 @@ type Transaction interface {
 	Ready(sdp *sdp.Message) bool
 	Record(sdp *sdp.Message) bool
 	RecordServe(ch Channel) error
+	Play(sdp *sdp.Message) bool
+	PlayServe(ch Channel) error
 	Close() error
 }
 
@@ -40,6 +42,44 @@ type transaction struct {
 	medias      map[string]*Media
 	rwm         sync.RWMutex
 	interleaved bool
+}
+
+func (t *transaction) Play(sdp *sdp.Message) bool {
+	interleaved := true
+	for _, m := range t.medias {
+		interleaved = m.interleaved
+		break
+	}
+	for _, m := range sdp.Medias {
+		s := m.Attribute("control")
+		media, ok := t.medias[s]
+		if !ok {
+			return false
+		}
+		if media.record != false {
+			return false
+		}
+		if media.interleaved != interleaved {
+			return false
+		}
+	}
+	t.interleaved = interleaved
+	t.setStatus(status.PLAYING)
+	return true
+}
+
+func (t *transaction) PlayServe(ch Channel) error {
+	if t.interleaved {
+		buf := make([]byte, 2048)
+		for {
+			_, err := t.transport.Read(buf)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		return nil
+	}
 }
 
 func (t *transaction) RecordServe(ch Channel) error {

@@ -63,7 +63,18 @@ func (u *UnimplementedServerHandler) ANNOUNCE(req Request, res Response, tx Tran
 }
 
 func (u *UnimplementedServerHandler) DESCRIBE(req Request, res Response, tx Transaction) error {
-	panic("implement me")
+	log.Debugf("describe request url: %s", req.URL().String())
+	ch, ok := u.tc.GetCh(req.Channel())
+	if !ok {
+		return tx.Response(ErrInternal(res))
+	}
+	raw := ch.Raw()
+	if raw == nil || len(raw) == 0 {
+		return tx.Response(ErrInternal(res))
+	}
+	res.SetHeader(header.ContentType, header.ContentTypeSDP)
+	res.SetBody(raw)
+	return tx.Response(res)
 }
 
 func (u *UnimplementedServerHandler) SETUP(req Request, res Response, tx Transaction) error {
@@ -112,7 +123,28 @@ func (u *UnimplementedServerHandler) SETUP(req Request, res Response, tx Transac
 }
 
 func (u *UnimplementedServerHandler) PLAY(req Request, res Response, tx Transaction) error {
-	panic("implement me")
+	log.Debugf("play request url: %s", req.URL().String())
+	ch, ok := u.tc.GetCh(req.Channel())
+	if !ok {
+		return tx.Response(ErrInternal(res))
+	}
+	ok = tx.Play(ch.SDP())
+	if !ok {
+		return tx.Response(ErrInternal(res))
+	}
+	err := tx.Response(res)
+	if err != nil {
+		return err
+	}
+
+	err = tx.PlayServe(ch)
+	if err != nil {
+		if err == io.EOF {
+			return nil
+		}
+		log.Debugf("can not serve play: %v", err)
+	}
+	return nil
 }
 
 func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transaction) error {

@@ -11,6 +11,7 @@ var _ Channel = (*channel)(nil)
 type Channel interface {
 	SetSDP(sdp *sdp.Message, raw []byte)
 	SDP() *sdp.Message
+	Raw() []byte
 	Lock(id string) bool
 	Unlock()
 	Package() *Package
@@ -47,6 +48,10 @@ type channel struct {
 	source string
 	pool   sync.Pool
 	input  chan *Package
+}
+
+func (c *channel) Raw() []byte {
+	return c.raw
 }
 
 func (c *channel) serve() {

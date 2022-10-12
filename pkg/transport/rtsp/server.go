@@ -155,8 +155,8 @@ func (s *Server) handleRawConn(conn net.Conn) {
 	s.log.Errorf("create new session for %s: %s", trans.Addr(), tx.id)
 	defer func() {
 		if tx != nil {
+			s.log.Errorf("destroy session %s for %s", trans.Addr(), tx.id)
 			s.tc.DeleteTx(tx.id)
-			s.log.Errorf("destroy session for %s: %s", trans.Addr(), tx.id)
 		}
 	}()
 	for {
@@ -227,6 +227,11 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 		if tx.state != status.READY && tx.state != status.PLAYING {
 			return tx.Response(ErrMethodNotValidINThisState(res))
 		}
+		sid := req.SessionID()
+		if sid != tx.id {
+			return tx.Response(ErrInternal(res))
+		}
+		res.SetHeader(header.Session, tx.id)
 		return handlerFunc(req, res, tx)
 	}
 
