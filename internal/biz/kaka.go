@@ -10,12 +10,11 @@ import (
 )
 
 type Channel struct {
-	Id        string
-	Source    rtsp.Transaction
-	Terminals TerminalsOperator
-	SDP       *sdp.Message
-	RawSDP    []byte
-	mu        sync.Mutex
+	Id     string
+	Source rtsp.Transaction
+	SDP    *sdp.Message
+	RawSDP []byte
+	mu     sync.Mutex
 }
 
 type ChannelRepo interface {

@@ -46,10 +46,9 @@ func (r *channelRepo) Delete(_ context.Context, id string) error {
 func (r *channelRepo) Create(_ context.Context, id string) (*biz.Channel, error) {
 
 	nc := &biz.Channel{
-		Id:        id,
-		Terminals: biz.NewTerminalsOperator(),
-		SDP:       nil,
-		RawSDP:    nil,
+		Id:     id,
+		SDP:    nil,
+		RawSDP: nil,
 	}
 	r.rwm.Lock()
 	r.channels[nc.Id] = nc

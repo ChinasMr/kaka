@@ -3,6 +3,7 @@ package rtsp
 import (
 	"github.com/ChinasMr/kaka/pkg/log"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/header"
+	"io"
 	"strings"
 )
 
@@ -132,7 +133,17 @@ func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transa
 	if err != nil {
 		return err
 	}
-	return tx.Serve(ch)
+	// if is interleaved, fun recordServe serve
+	// and blocked until err.
+	// if is udp, fun recordServe just return.
+	err = tx.RecordServe(ch)
+	if err != nil {
+		if err == io.EOF {
+			return err
+		}
+		log.Errorf("can not serve record: %v", err)
+	}
+	return nil
 }
 
 func (u *UnimplementedServerHandler) TEARDOWN(req Request, res Response, tx Transaction) error {

@@ -22,14 +22,14 @@ type Media struct {
 type Transaction interface {
 	ID() string
 	Status() status.Status
-	Forward(data *Package, wg *sync.WaitGroup)
+	Forward(p *Package, wg *sync.WaitGroup) error
 	Response(res Response) error
 	Request(req Request) error
 	Medias() map[string]*Media
 	AddMedia(media *Media)
 	Ready(sdp *sdp.Message) bool
 	Record(sdp *sdp.Message) bool
-	Serve(ch Channel) error
+	RecordServe(ch Channel) error
 	Close() error
 }
 
@@ -42,10 +42,19 @@ type transaction struct {
 	interleaved bool
 }
 
-func (t *transaction) Serve(ch Channel) error {
+func (t *transaction) RecordServe(ch Channel) error {
 	if t.interleaved {
+		input := ch.Input()
 		for {
-
+			p := ch.Package()
+			c, l, err := t.ReadInterleavedFrame(p.Data)
+			if err != nil {
+				return err
+			}
+			p.Len = l
+			p.Ch = c
+			p.Interleaved = true
+			input <- p
 		}
 	} else {
 		// todo register fast route for udp trans.
@@ -75,7 +84,7 @@ func (t *transaction) Record(sdp *sdp.Message) bool {
 	}
 	t.interleaved = interleaved
 	t.setStatus(status.RECORDING)
-	return false
+	return true
 }
 
 func (t *transaction) Ready(sdp *sdp.Message) bool {
@@ -115,8 +124,13 @@ func (t *transaction) Close() error {
 	return t.transport.Close()
 }
 
-func (t *transaction) Forward(data *Package, wg *sync.WaitGroup) {
-
+func (t *transaction) Forward(p *Package, wg *sync.WaitGroup) error {
+	defer wg.Done()
+	if p.Interleaved {
+		return t.writeInterleavedFrame(p.Ch, p.Data[:p.Len])
+	} else {
+		return nil
+	}
 }
 
 func (t *transaction) ID() string {

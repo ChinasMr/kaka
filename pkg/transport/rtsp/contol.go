@@ -3,65 +3,10 @@ package rtsp
 import (
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"github.com/google/uuid"
-	"gortc.io/sdp"
 	"sync"
 )
 
 var _ TransactionController = (*transactionController)(nil)
-
-type Channel interface {
-	SetSDP(sdp *sdp.Message, raw []byte)
-	SDP() *sdp.Message
-	Lock(id string) bool
-}
-
-// A server MAY refuse to change parameters of an existing stream.
-
-type channel struct {
-	name   string
-	txs    map[string]*transaction
-	rwm    sync.RWMutex
-	sdp    *sdp.Message
-	raw    []byte
-	source string
-}
-
-func (c *channel) Lock(id string) bool {
-	if c.source == "" {
-		c.source = id
-		return true
-	} else {
-		if c.source == id {
-			return true
-		}
-	}
-	return false
-}
-
-func (c *channel) SDP() *sdp.Message {
-	c.rwm.RLock()
-	defer c.rwm.RUnlock()
-	return c.sdp
-}
-
-func (c *channel) SetSDP(sdp *sdp.Message, raw []byte) {
-	c.rwm.Lock()
-	c.sdp = sdp
-	c.raw = raw
-	c.rwm.Unlock()
-	// todo they maybe a call back function.
-}
-
-func NewChannel(ch string) Channel {
-	return &channel{
-		name:   ch,
-		txs:    map[string]*transaction{},
-		rwm:    sync.RWMutex{},
-		sdp:    nil,
-		raw:    nil,
-		source: "",
-	}
-}
 
 type TransactionController interface {
 	CreateTx(trans *transport) *transaction
