@@ -201,7 +201,7 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 		}
 		// check and set session id.
 		sid := req.SessionID()
-		if len(sid) != 0 && sid != sid {
+		if len(sid) != 0 && sid != tx.id {
 			return tx.Response(ErrInternal(res))
 		}
 		res.SetHeader(header.Session, tx.id)
@@ -214,6 +214,11 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 		if tx.state != status.READY && tx.state != status.RECORDING {
 			return tx.Response(ErrMethodNotValidINThisState(res))
 		}
+		sid := req.SessionID()
+		if sid != tx.id {
+			return tx.Response(ErrInternal(res))
+		}
+		res.SetHeader(header.Session, tx.id)
 		return handlerFunc(req, res, tx)
 	}
 
@@ -226,6 +231,10 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 	}
 
 	if req.method == methods.TEARDOWN || req.Method() == methods.DOWN {
+		sid := req.SessionID()
+		if sid != tx.id {
+			return tx.Response(ErrInternal(res))
+		}
 		_ = handlerFunc(req, res, tx)
 		return io.EOF
 	}

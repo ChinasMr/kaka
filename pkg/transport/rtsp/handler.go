@@ -44,10 +44,16 @@ func (u *UnimplementedServerHandler) ANNOUNCE(req Request, res Response, tx Tran
 	log.Debugf("announce request url: %s", req.URL().String())
 	sdp, err := req.ParseSDP()
 	if err != nil {
-		return err
+		log.Errorf("can not pares sdp message: %v", err)
+		return tx.Response(ErrInternal(res))
 	}
 	log.Debugf("source %s has media: %d", req.URL().String(), len(sdp.Medias))
 	ch, ok := u.tc.GetCh(req.Channel())
+	if !ok {
+		return tx.Response(ErrInternal(res))
+	}
+	// occupy the channel with transactions id.
+	ok = ch.Lock(tx.ID())
 	if !ok {
 		return tx.Response(ErrInternal(res))
 	}
@@ -109,7 +115,24 @@ func (u *UnimplementedServerHandler) PLAY(req Request, res Response, tx Transact
 }
 
 func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transaction) error {
-	panic("implement me")
+	log.Debugf("record request url: %s", req.URL().String())
+	ch, ok := u.tc.GetCh(req.Channel())
+	if !ok {
+		return tx.Response(ErrInternal(res))
+	}
+	ok = ch.Lock(tx.ID())
+	if !ok {
+		return tx.Response(ErrInternal(res))
+	}
+	ok = tx.Record(ch.SDP())
+	if !ok {
+		return tx.Response(ErrInternal(res))
+	}
+	err := tx.Response(res)
+	if err != nil {
+		return err
+	}
+	return tx.Serve(ch)
 }
 
 func (u *UnimplementedServerHandler) TEARDOWN(req Request, res Response, tx Transaction) error {

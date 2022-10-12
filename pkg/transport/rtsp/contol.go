@@ -12,16 +12,30 @@ var _ TransactionController = (*transactionController)(nil)
 type Channel interface {
 	SetSDP(sdp *sdp.Message, raw []byte)
 	SDP() *sdp.Message
+	Lock(id string) bool
 }
 
 // A server MAY refuse to change parameters of an existing stream.
 
 type channel struct {
-	name string
-	txs  map[string]*transaction
-	rwm  sync.RWMutex
-	sdp  *sdp.Message
-	raw  []byte
+	name   string
+	txs    map[string]*transaction
+	rwm    sync.RWMutex
+	sdp    *sdp.Message
+	raw    []byte
+	source string
+}
+
+func (c *channel) Lock(id string) bool {
+	if c.source == "" {
+		c.source = id
+		return true
+	} else {
+		if c.source == id {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *channel) SDP() *sdp.Message {
@@ -40,11 +54,12 @@ func (c *channel) SetSDP(sdp *sdp.Message, raw []byte) {
 
 func NewChannel(ch string) Channel {
 	return &channel{
-		name: ch,
-		txs:  map[string]*transaction{},
-		rwm:  sync.RWMutex{},
-		sdp:  nil,
-		raw:  nil,
+		name:   ch,
+		txs:    map[string]*transaction{},
+		rwm:    sync.RWMutex{},
+		sdp:    nil,
+		raw:    nil,
+		source: "",
 	}
 }
 

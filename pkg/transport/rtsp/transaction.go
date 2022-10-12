@@ -28,15 +28,54 @@ type Transaction interface {
 	Medias() map[string]*Media
 	AddMedia(media *Media)
 	Ready(sdp *sdp.Message) bool
+	Record(sdp *sdp.Message) bool
+	Serve(ch Channel) error
 	Close() error
 }
 
 type transaction struct {
-	id        string
-	state     status.Status
-	transport Transport
-	medias    map[string]*Media
-	rwm       sync.RWMutex
+	id          string
+	state       status.Status
+	transport   Transport
+	medias      map[string]*Media
+	rwm         sync.RWMutex
+	interleaved bool
+}
+
+func (t *transaction) Serve(ch Channel) error {
+	if t.interleaved {
+		for {
+
+		}
+	} else {
+		// todo register fast route for udp trans.
+
+		return nil
+	}
+}
+
+func (t *transaction) Record(sdp *sdp.Message) bool {
+	interleaved := true
+	for _, m := range t.medias {
+		interleaved = m.interleaved
+		break
+	}
+	for _, m := range sdp.Medias {
+		s := m.Attribute("control")
+		media, ok := t.medias[s]
+		if !ok {
+			return false
+		}
+		if media.record != true {
+			return false
+		}
+		if media.interleaved != interleaved {
+			return false
+		}
+	}
+	t.interleaved = interleaved
+	t.setStatus(status.RECORDING)
+	return false
 }
 
 func (t *transaction) Ready(sdp *sdp.Message) bool {
@@ -47,6 +86,7 @@ func (t *transaction) Ready(sdp *sdp.Message) bool {
 			return false
 		}
 	}
+
 	t.setStatus(status.READY)
 	return true
 }
