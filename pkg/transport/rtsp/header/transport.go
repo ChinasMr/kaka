@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+var name = ""
+
 type TransportHeader map[string]struct{}
 
 func (t TransportHeader) Has(keys ...string) bool {
@@ -25,4 +27,8 @@ func (t TransportHeader) Value(k string) string {
 		}
 	}
 	return ""
+}
+
+func (t TransportHeader) Type() {
+
 }

@@ -3,6 +3,7 @@ package rtsp
 import (
 	"context"
 	"github.com/ChinasMr/kaka/pkg/log"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/header"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/methods"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"io"
@@ -149,15 +150,13 @@ func (s *Server) serveRawRTCP(addr netip.AddrPort, bytes []byte) {
 
 }
 func (s *Server) handleRawConn(conn net.Conn) {
-	var (
-		tx    *transaction
-		res   *response
-		once  = &sync.Once{}
-		trans = newTransport(conn)
-	)
+	trans := newTransport(conn)
+	tx := s.tc.CreateTx(trans)
+	s.log.Errorf("create new session for %s: %s", trans.Addr(), tx.id)
 	defer func() {
 		if tx != nil {
-			s.tc.Delete(tx.id)
+			s.tc.DeleteTx(tx.id)
+			s.log.Errorf("destroy session for %s: %s", trans.Addr(), tx.id)
 		}
 	}()
 	for {
@@ -171,18 +170,11 @@ func (s *Server) handleRawConn(conn net.Conn) {
 		}
 		s.log.Debugf("%s request from %s", req.method, trans.Addr())
 		// create a corresponding response.
-		res = NewResponse(req.proto, req.cSeq)
+		res := NewResponse(req.proto, req.cSeq)
 		// check presentation description or media path.
 		if len(req.Path()) <= 1 {
-			ErrNotFound(res)
-			_ = trans.Write(res.Encoding())
-			continue
+			return
 		}
-		// create the transaction.
-		once.Do(func() {
-			tx = s.tc.Create(trans)
-			s.log.Errorf("create new session for %s: %s", trans.Addr(), tx.id)
-		})
 		// handle the request.
 		err = s.handleRequest(req, res, tx)
 		if err != nil {
@@ -190,6 +182,7 @@ func (s *Server) handleRawConn(conn net.Conn) {
 				return
 			}
 			s.log.Errorf("can not handle request: %v", err)
+			continue
 		}
 	}
 }
@@ -198,36 +191,28 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 	// try to get the handle function.
 	handlerFunc, ok := s.handlers[req.method]
 	if !ok {
-		ErrMethodNotAllowed(res)
-		return tx.Response(res)
+		return tx.Response(ErrMethodNotAllowed(res))
 	}
 	if req.method == methods.SETUP {
 		// check state, buf every state can call the setup.
-		// get transports header.
-		transports, has := req.Transport()
-		if !has {
-			ErrUnsupportedTransport(res)
-			return tx.Response(res)
+		// get and check transports header.
+		if transports, has := req.Transport(); !has || !transports.Has("unicast") {
+			return tx.Response(ErrUnsupportedTransport(res))
 		}
-
-		// disabled multicast.
-		has = transports.Has("unicast")
-		if !has {
-			ErrUnsupportedTransport(res)
-			return tx.Response(res)
+		// check and set session id.
+		sid := req.SessionID()
+		if len(sid) != 0 && sid != sid {
+			return tx.Response(ErrInternal(res))
 		}
-		err := handlerFunc(req, res, tx)
-		if err != nil {
-			return err
-		}
-		return nil
+		res.SetHeader(header.Session, tx.id)
+		// call the handle.
+		return handlerFunc(req, res, tx)
 	}
 
 	if req.method == methods.RECORD {
 		// state check
 		if tx.state != status.READY && tx.state != status.RECORDING {
-			ErrMethodNotValidINThisState(res)
-			return tx.Response(res)
+			return tx.Response(ErrMethodNotValidINThisState(res))
 		}
 		return handlerFunc(req, res, tx)
 	}
@@ -235,8 +220,7 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 	// state check
 	if req.method == methods.PLAY {
 		if tx.state != status.READY && tx.state != status.PLAYING {
-			ErrMethodNotValidINThisState(res)
-			return tx.Response(res)
+			return tx.Response(ErrMethodNotValidINThisState(res))
 		}
 		return handlerFunc(req, res, tx)
 	}

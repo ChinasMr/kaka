@@ -25,6 +25,7 @@ type Request interface {
 	Body() []byte
 	Encode() []byte
 	ParseSDP() (*sdp.Message, error)
+	Channel() string
 }
 
 type request struct {

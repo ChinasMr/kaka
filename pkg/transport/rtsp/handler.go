@@ -46,9 +46,12 @@ func (u *UnimplementedServerHandler) ANNOUNCE(req Request, res Response, tx Tran
 	if err != nil {
 		return err
 	}
-
-	// todo channel controller
 	log.Debugf("source %s has media: %d", req.URL().String(), len(sdp.Medias))
+	ch, ok := u.tc.GetCh(req.Channel())
+	if !ok {
+		return tx.Response(ErrInternal(res))
+	}
+	ch.SetSDP(sdp, req.Body())
 	return tx.Response(res)
 }
 
@@ -57,7 +60,10 @@ func (u *UnimplementedServerHandler) DESCRIBE(req Request, res Response, tx Tran
 }
 
 func (u *UnimplementedServerHandler) SETUP(req Request, res Response, tx Transaction) error {
-	panic("implement me")
+	log.Debugf("setup request url: %s", req.URL().String())
+	tr, _ := req.Transport()
+	log.Debugf("transport: %+v", tr)
+	return tx.Response(res)
 }
 
 func (u *UnimplementedServerHandler) PLAY(req Request, res Response, tx Transaction) error {

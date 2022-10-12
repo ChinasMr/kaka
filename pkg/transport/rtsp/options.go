@@ -43,7 +43,7 @@ func RTCP(rtcp string) ServerOption {
 	}
 }
 
-func Channel(ch string) ServerOption {
+func WithChannel(ch string) ServerOption {
 	return func(s *Server) {
 		s.chs = append(s.chs, ch)
 	}
