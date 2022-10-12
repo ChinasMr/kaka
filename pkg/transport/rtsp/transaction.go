@@ -4,31 +4,63 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
+	"gortc.io/sdp"
 	"io"
 	"sync"
-	"time"
 )
 
 var _ Transaction = (*transaction)(nil)
 
+type Media struct {
+	control     string
+	interleaved bool
+	record      bool
+	rtp         int64
+	rtcp        int64
+}
+
 type Transaction interface {
 	ID() string
 	Status() status.Status
-	SetStatus(s status.Status)
-	Interleaved() bool
-	SetInterleaved()
 	Forward(data *Package, wg *sync.WaitGroup)
 	Response(res Response) error
 	Request(req Request) error
+	Medias() map[string]*Media
+	AddMedia(media *Media)
+	Ready(sdp *sdp.Message) bool
 	Close() error
 }
 
 type transaction struct {
-	id          string
-	state       status.Status
-	interleaved bool
-	timeout     time.Duration
-	transport   Transport
+	id        string
+	state     status.Status
+	transport Transport
+	medias    map[string]*Media
+	rwm       sync.RWMutex
+}
+
+func (t *transaction) Ready(sdp *sdp.Message) bool {
+	for _, m := range sdp.Medias {
+		s := m.Attribute("control")
+		_, ok := t.medias[s]
+		if !ok {
+			return false
+		}
+	}
+	t.setStatus(status.READY)
+	return true
+}
+
+func (t *transaction) Medias() map[string]*Media {
+	t.rwm.RLock()
+	defer t.rwm.RUnlock()
+	return t.medias
+}
+
+func (t *transaction) AddMedia(media *Media) {
+	t.rwm.Lock()
+	t.rwm.Unlock()
+	t.medias[media.control] = media
 }
 
 func (t *transaction) Request(req Request) error {
@@ -51,19 +83,15 @@ func (t *transaction) ID() string {
 	return t.id
 }
 
-func (t *transaction) Interleaved() bool {
-	return t.interleaved
-}
-
-func (t *transaction) SetInterleaved() {
-	t.interleaved = true
-}
-
-func (t *transaction) SetStatus(s status.Status) {
+func (t *transaction) setStatus(s status.Status) {
+	t.rwm.Lock()
+	t.rwm.Unlock()
 	t.state = s
 }
 
 func (t *transaction) Status() status.Status {
+	t.rwm.RLock()
+	t.rwm.RUnlock()
 	return t.state
 }
 

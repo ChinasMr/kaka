@@ -15,6 +15,7 @@ type Request interface {
 	Method() methods.Method
 	URL() *url.URL
 	Path() string
+	Stream() string
 	Headers() map[string][]string
 	Header(key string) ([]string, bool)
 	Transport() (header.TransportHeader, bool)
@@ -35,6 +36,15 @@ type request struct {
 	body    []byte
 	cSeq    string
 	proto   string
+}
+
+func (r request) Stream() string {
+	p := strings.TrimLeft(r.Path(), "/")
+	ps := strings.Split(p, "/")
+	if len(ps) < 2 {
+		return ""
+	}
+	return ps[1]
 }
 
 func (r request) ParseSDP() (*sdp.Message, error) {

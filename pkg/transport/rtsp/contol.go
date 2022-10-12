@@ -5,13 +5,13 @@ import (
 	"github.com/google/uuid"
 	"gortc.io/sdp"
 	"sync"
-	"time"
 )
 
 var _ TransactionController = (*transactionController)(nil)
 
 type Channel interface {
 	SetSDP(sdp *sdp.Message, raw []byte)
+	SDP() *sdp.Message
 }
 
 // A server MAY refuse to change parameters of an existing stream.
@@ -19,9 +19,15 @@ type Channel interface {
 type channel struct {
 	name string
 	txs  map[string]*transaction
-	rwm  *sync.RWMutex
+	rwm  sync.RWMutex
 	sdp  *sdp.Message
 	raw  []byte
+}
+
+func (c *channel) SDP() *sdp.Message {
+	c.rwm.RLock()
+	defer c.rwm.RUnlock()
+	return c.sdp
 }
 
 func (c *channel) SetSDP(sdp *sdp.Message, raw []byte) {
@@ -36,7 +42,7 @@ func NewChannel(ch string) Channel {
 	return &channel{
 		name: ch,
 		txs:  map[string]*transaction{},
-		rwm:  &sync.RWMutex{},
+		rwm:  sync.RWMutex{},
 		sdp:  nil,
 		raw:  nil,
 	}
@@ -52,7 +58,7 @@ type TransactionController interface {
 type transactionController struct {
 	chs map[string]Channel
 	txs map[string]*transaction
-	rwm *sync.RWMutex
+	rwm sync.RWMutex
 }
 
 func (t *transactionController) GetCh(ch string) (Channel, bool) {
@@ -76,7 +82,7 @@ func (t *transactionController) GetOrCreateCh(ch string) Channel {
 
 func newTransactionController(chs ...string) TransactionController {
 	tc := &transactionController{
-		rwm: &sync.RWMutex{},
+		rwm: sync.RWMutex{},
 		txs: map[string]*transaction{},
 		chs: map[string]Channel{},
 	}
@@ -109,7 +115,16 @@ func (t *transactionController) DeleteTx(id string) {
 	putTx(tx)
 }
 
-var txPool = &sync.Pool{New: func() any { return &transaction{} }}
+var txPool = &sync.Pool{
+	New: func() any {
+		return &transaction{
+			id:        "",
+			state:     status.INIT,
+			transport: nil,
+			medias:    map[string]*Media{},
+		}
+	},
+}
 
 func newTx(trans *transport) *transaction {
 	id, _ := uuid.NewUUID()
@@ -122,8 +137,7 @@ func newTx(trans *transport) *transaction {
 func putTx(tx *transaction) {
 	tx.id = ""
 	tx.state = status.INIT
-	tx.interleaved = false
-	tx.timeout = 3 * time.Second
 	tx.transport = nil
+	tx.medias = map[string]*Media{}
 	txPool.Put(tx)
 }

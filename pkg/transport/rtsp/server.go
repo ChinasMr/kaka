@@ -196,7 +196,7 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 	if req.method == methods.SETUP {
 		// check state, buf every state can call the setup.
 		// get and check transports header.
-		if transports, has := req.Transport(); !has || !transports.Has("unicast") {
+		if transports, has := req.Transport(); !has || !transports.Validate() {
 			return tx.Response(ErrUnsupportedTransport(res))
 		}
 		// check and set session id.

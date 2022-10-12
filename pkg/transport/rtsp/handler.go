@@ -62,8 +62,46 @@ func (u *UnimplementedServerHandler) DESCRIBE(req Request, res Response, tx Tran
 func (u *UnimplementedServerHandler) SETUP(req Request, res Response, tx Transaction) error {
 	log.Debugf("setup request url: %s", req.URL().String())
 	tr, _ := req.Transport()
-	log.Debugf("transport: %+v", tr)
-	return tx.Response(res)
+	if tr.Multicast() {
+		return tx.Response(ErrUnsupportedTransport(res))
+	}
+
+	ch, ok := u.tc.GetCh(req.Channel())
+	if !ok {
+		return tx.Response(ErrInternal(res))
+	}
+	for _, m := range ch.SDP().Medias {
+		stream := m.Attribute("control")
+		if stream == req.Stream() {
+			// add tcp stream.
+			if p1, p2, ok1 := tr.Interleaved(); ok1 && tr.LowerTransportTCP() {
+				log.Debugf("rtp tpc channel: %d, rtcp tpc channel: %d", p1, p2)
+				tx.AddMedia(&Media{
+					interleaved: true,
+					rtp:         p1,
+					rtcp:        p2,
+					control:     stream,
+					record:      tr.Record(),
+				})
+				res.SetHeader(header.Transport,
+					header.NewTransportHeader(header.LowerTransTCP,
+						header.ParamUnicast,
+						header.NewInterleavedParam(p1, p2)))
+			}
+			// add udp stream.
+
+			// send response.
+			err := tx.Response(res)
+			if err != nil {
+				return err
+			}
+			// refresh the session status.
+			tx.Ready(ch.SDP())
+			return nil
+		}
+	}
+
+	return tx.Response(ErrInternal(res))
 }
 
 func (u *UnimplementedServerHandler) PLAY(req Request, res Response, tx Transaction) error {
