@@ -68,7 +68,7 @@ func (u *UnimplementedServerHandler) DESCRIBE(req Request, res Response, tx Tran
 		return tx.Response(ErrInternal(res))
 	}
 	raw := ch.Raw()
-	if raw == nil || len(raw) == 0 {
+	if len(raw) == 0 {
 		return tx.Response(ErrInternal(res))
 	}
 	res.SetHeader(header.ContentType, header.ContentTypeSDP)

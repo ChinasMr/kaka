@@ -24,7 +24,7 @@ func NewChannel(ch string) Channel {
 		name:   ch,
 		txs:    map[string]Transaction{},
 		rwm:    sync.RWMutex{},
-		sdp:    nil,
+		sdp:    &sdp.Message{},
 		raw:    nil,
 		source: "",
 		input:  make(chan *Package, 2),
@@ -131,7 +131,7 @@ func (c *channel) serve() {
 
 func (c *channel) reset() {
 	c.rwm.Lock()
-	c.sdp = nil
+	c.sdp = &sdp.Message{}
 	c.raw = nil
 	c.source = ""
 	c.rwm.Unlock()
