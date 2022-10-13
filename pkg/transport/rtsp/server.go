@@ -64,7 +64,15 @@ func (s *Server) Start(ctx context.Context) error {
 	return s.serve()
 }
 func (s *Server) Stop(_ context.Context) error {
-	s.GracefulStop()
+	if s.lis != nil {
+		_ = s.lis.Close()
+	}
+	if s.rtpConn != nil {
+		_ = s.rtcpConn.Close()
+	}
+	if s.rtcpConn != nil {
+		_ = s.rtcpConn.Close()
+	}
 	log.Info("[RTSP] server stopping")
 	return nil
 }
@@ -130,7 +138,6 @@ func (s *Server) serve() error {
 	for {
 		rawConn, err := s.lis.Accept()
 		if err != nil {
-			s.log.Errorf("can not accept new connection: %v", err)
 			return err
 		}
 
@@ -250,6 +257,7 @@ func (s *Server) RegisterHandleFunc(method methods.Method, fn HandlerFunc) {
 	s.handlers[method] = fn
 	s.handlerFunctions = append(s.handlerFunctions, method.String())
 }
+
 func (s *Server) RegisterHandler(handler minimalHandler) {
 	s.RegisterHandleFunc(methods.OPTIONS, handler.OPTIONS)
 	s.RegisterHandleFunc(methods.DESCRIBE, handler.DESCRIBE)
@@ -259,9 +267,4 @@ func (s *Server) RegisterHandler(handler minimalHandler) {
 	s.RegisterHandleFunc(methods.SETUP, handler.SETUP)
 	s.RegisterHandleFunc(methods.TEARDOWN, handler.TEARDOWN)
 	s.RegisterHandleFunc(methods.DOWN, handler.TEARDOWN)
-}
-func (s *Server) GracefulStop() {
-	if s.lis != nil {
-		_ = s.lis.Close()
-	}
 }
