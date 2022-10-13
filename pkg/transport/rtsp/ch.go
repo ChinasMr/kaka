@@ -3,6 +3,7 @@ package rtsp
 import (
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"gortc.io/sdp"
+	"io"
 	"sync"
 )
 
@@ -13,15 +14,14 @@ type Channel interface {
 	SDP() *sdp.Message
 	Raw() []byte
 	Lock(id string) bool
-	Unlock()
-	Package() *Package
-	Input() chan *Package
+	Play(tx Transaction) error
+	Record(tx Transaction) error
 }
 
 func NewChannel(ch string) Channel {
 	rv := &channel{
 		name:   ch,
-		txs:    map[string]*transaction{},
+		txs:    map[string]Transaction{},
 		rwm:    sync.RWMutex{},
 		sdp:    nil,
 		raw:    nil,
@@ -41,13 +41,49 @@ func NewChannel(ch string) Channel {
 
 type channel struct {
 	name   string
-	txs    map[string]*transaction
+	txs    map[string]Transaction
 	rwm    sync.RWMutex
 	sdp    *sdp.Message
 	raw    []byte
 	source string
 	pool   sync.Pool
 	input  chan *Package
+}
+
+func (c *channel) Record(tx Transaction) error {
+	if tx.Interleaved() {
+		for {
+			p := c.newPackage()
+			ch, l, err := tx.ReadInterleavedFrame(p.Data)
+			if err != nil {
+				return err
+			}
+			p.Len = l
+			p.Ch = ch
+			p.Interleaved = true
+			c.input <- p
+		}
+	} else {
+		return nil
+	}
+}
+
+func (c *channel) Play(tx Transaction) error {
+	c.rwm.Lock()
+	c.txs[tx.ID()] = tx
+	c.rwm.Unlock()
+
+	if tx.Interleaved() {
+		// blocking the connection.
+		buf := make([]byte, 2048)
+		for {
+			_, err := tx.Read(buf)
+			if err != nil {
+				return io.EOF
+			}
+		}
+	}
+	return nil
 }
 
 func (c *channel) Raw() []byte {
@@ -60,28 +96,25 @@ func (c *channel) serve() {
 		wg := &sync.WaitGroup{}
 		c.rwm.RLock()
 		for _, tx := range c.txs {
-			if tx.state == status.PLAYING {
+			if tx.Status() == status.PLAYING {
 				wg.Add(1)
-				tx.Forward(pack, wg)
+				go tx.Forward(pack, wg)
 			}
 		}
 		c.rwm.RUnlock()
 		go func() {
 			wg.Wait()
 			c.putPackage(pack)
+			// todo refresh the live keeper.
 		}()
 	}
 }
 
-func (c *channel) Unlock() {
+func (c *channel) unlock() {
 	c.source = ""
 }
 
-func (c *channel) Input() chan *Package {
-	return c.input
-}
-
-func (c *channel) Package() *Package {
+func (c *channel) newPackage() *Package {
 	return c.pool.Get().(*Package)
 }
 

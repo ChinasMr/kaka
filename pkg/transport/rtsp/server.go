@@ -166,7 +166,7 @@ func (s *Server) handleRawConn(conn net.Conn) {
 				return
 			}
 			s.log.Errorf("can not parse rtsp request: %v", err)
-			continue
+			break
 		}
 		s.log.Debugf("%s request from %s", req.method, trans.Addr())
 		// create a corresponding response.

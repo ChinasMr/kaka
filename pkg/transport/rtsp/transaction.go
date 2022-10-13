@@ -27,11 +27,13 @@ type Transaction interface {
 	Request(req Request) error
 	Medias() map[string]*Media
 	AddMedia(media *Media)
-	Ready(sdp *sdp.Message) bool
-	Record(sdp *sdp.Message) bool
-	RecordServe(ch Channel) error
-	Play(sdp *sdp.Message) bool
-	PlayServe(ch Channel) error
+	PreReady(sdp *sdp.Message) bool
+	PreRecord(sdp *sdp.Message) bool
+	PrePlay(sdp *sdp.Message) bool
+	Interleaved() bool
+	ReadInterleavedFrame(frame []byte) (int, uint32, error)
+	WriteInterleavedFrame(channel int, frame []byte) error
+	Read(buf []byte) (int, error)
 	Close() error
 }
 
@@ -44,7 +46,15 @@ type transaction struct {
 	interleaved bool
 }
 
-func (t *transaction) Play(sdp *sdp.Message) bool {
+func (t *transaction) Read(buf []byte) (int, error) {
+	return t.transport.Read(buf)
+}
+
+func (t *transaction) Interleaved() bool {
+	return t.interleaved
+}
+
+func (t *transaction) PrePlay(sdp *sdp.Message) bool {
 	interleaved := true
 	for _, m := range t.medias {
 		interleaved = m.interleaved
@@ -68,42 +78,7 @@ func (t *transaction) Play(sdp *sdp.Message) bool {
 	return true
 }
 
-func (t *transaction) PlayServe(ch Channel) error {
-	if t.interleaved {
-		buf := make([]byte, 2048)
-		for {
-			_, err := t.transport.Read(buf)
-			if err != nil {
-				return err
-			}
-		}
-	} else {
-		return nil
-	}
-}
-
-func (t *transaction) RecordServe(ch Channel) error {
-	if t.interleaved {
-		input := ch.Input()
-		for {
-			p := ch.Package()
-			c, l, err := t.ReadInterleavedFrame(p.Data)
-			if err != nil {
-				return err
-			}
-			p.Len = l
-			p.Ch = c
-			p.Interleaved = true
-			input <- p
-		}
-	} else {
-		// todo register fast route for udp trans.
-
-		return nil
-	}
-}
-
-func (t *transaction) Record(sdp *sdp.Message) bool {
+func (t *transaction) PreRecord(sdp *sdp.Message) bool {
 	interleaved := true
 	for _, m := range t.medias {
 		interleaved = m.interleaved
@@ -127,7 +102,7 @@ func (t *transaction) Record(sdp *sdp.Message) bool {
 	return true
 }
 
-func (t *transaction) Ready(sdp *sdp.Message) bool {
+func (t *transaction) PreReady(sdp *sdp.Message) bool {
 	for _, m := range sdp.Medias {
 		s := m.Attribute("control")
 		_, ok := t.medias[s]
@@ -135,7 +110,6 @@ func (t *transaction) Ready(sdp *sdp.Message) bool {
 			return false
 		}
 	}
-
 	t.setStatus(status.READY)
 	return true
 }
@@ -167,7 +141,7 @@ func (t *transaction) Close() error {
 func (t *transaction) Forward(p *Package, wg *sync.WaitGroup) error {
 	defer wg.Done()
 	if p.Interleaved {
-		return t.writeInterleavedFrame(p.Ch, p.Data[:p.Len])
+		return t.WriteInterleavedFrame(p.Ch, p.Data[:p.Len])
 	} else {
 		return nil
 	}
@@ -189,7 +163,7 @@ func (t *transaction) Status() status.Status {
 	return t.state
 }
 
-func (t *transaction) writeInterleavedFrame(channel int, frame []byte) error {
+func (t *transaction) WriteInterleavedFrame(channel int, frame []byte) error {
 	buf := make([]byte, 2048)
 	buf[0] = 0x24
 	buf[1] = byte(channel)

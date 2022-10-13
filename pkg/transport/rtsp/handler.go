@@ -114,7 +114,10 @@ func (u *UnimplementedServerHandler) SETUP(req Request, res Response, tx Transac
 				return err
 			}
 			// refresh the session status.
-			tx.Ready(ch.SDP())
+			ok = tx.PreReady(ch.SDP())
+			if ok {
+				log.Debugf("session setup complete")
+			}
 			return nil
 		}
 	}
@@ -128,7 +131,7 @@ func (u *UnimplementedServerHandler) PLAY(req Request, res Response, tx Transact
 	if !ok {
 		return tx.Response(ErrInternal(res))
 	}
-	ok = tx.Play(ch.SDP())
+	ok = tx.PrePlay(ch.SDP())
 	if !ok {
 		return tx.Response(ErrInternal(res))
 	}
@@ -137,10 +140,10 @@ func (u *UnimplementedServerHandler) PLAY(req Request, res Response, tx Transact
 		return err
 	}
 
-	err = tx.PlayServe(ch)
+	err = ch.Play(tx)
 	if err != nil {
 		if err == io.EOF {
-			return nil
+			return err
 		}
 		log.Debugf("can not serve play: %v", err)
 	}
@@ -157,7 +160,7 @@ func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transa
 	if !ok {
 		return tx.Response(ErrInternal(res))
 	}
-	ok = tx.Record(ch.SDP())
+	ok = tx.PreRecord(ch.SDP())
 	if !ok {
 		return tx.Response(ErrInternal(res))
 	}
@@ -168,12 +171,12 @@ func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transa
 	// if is interleaved, fun recordServe serve
 	// and blocked until err.
 	// if is udp, fun recordServe just return.
-	err = tx.RecordServe(ch)
+	err = ch.Record(tx)
 	if err != nil {
 		if err == io.EOF {
 			return err
 		}
-		log.Errorf("can not serve record: %v", err)
+		log.Errorf("can not record: %v", err)
 	}
 	return nil
 }
