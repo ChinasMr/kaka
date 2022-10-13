@@ -17,7 +17,7 @@ type TransactionController interface {
 
 type transactionController struct {
 	chs map[string]Channel
-	txs map[string]*transaction
+	txs map[string]*transaction // this is useless !
 	rwm sync.RWMutex
 }
 

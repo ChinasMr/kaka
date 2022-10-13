@@ -162,11 +162,7 @@ func (s *Server) handleRawConn(conn net.Conn) {
 	for {
 		req, err := trans.Parse()
 		if err != nil {
-			if err == io.EOF {
-				return
-			}
-			s.log.Errorf("can not parse rtsp request: %v", err)
-			break
+			return
 		}
 		s.log.Debugf("%s request from %s", req.method, trans.Addr())
 		// create a corresponding response.
@@ -179,7 +175,7 @@ func (s *Server) handleRawConn(conn net.Conn) {
 		err = s.handleRequest(req, res, tx)
 		if err != nil {
 			if err == io.EOF {
-				return
+				continue
 			}
 			s.log.Errorf("can not handle request: %v", err)
 			continue
@@ -236,6 +232,7 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 	}
 
 	if req.method == methods.TEARDOWN || req.Method() == methods.DOWN {
+		// avoid teardown finished other transaction unexpectedly.
 		sid := req.SessionID()
 		if sid != tx.id {
 			return tx.Response(ErrInternal(res))

@@ -54,11 +54,10 @@ func (u *UnimplementedServerHandler) ANNOUNCE(req Request, res Response, tx Tran
 		return tx.Response(ErrInternal(res))
 	}
 	// occupy the channel with transactions id.
-	ok = ch.Lock(tx.ID())
+	ok = ch.SetSDP(tx, sdp, req.Body())
 	if !ok {
 		return tx.Response(ErrInternal(res))
 	}
-	ch.SetSDP(sdp, req.Body())
 	return tx.Response(res)
 }
 
@@ -140,14 +139,8 @@ func (u *UnimplementedServerHandler) PLAY(req Request, res Response, tx Transact
 		return err
 	}
 
-	err = ch.Play(tx)
-	if err != nil {
-		if err == io.EOF {
-			return err
-		}
-		log.Debugf("can not serve play: %v", err)
-	}
-	return nil
+	// just return io.EOF or nil.
+	return ch.Play(tx)
 }
 
 func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transaction) error {
@@ -182,5 +175,11 @@ func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transa
 }
 
 func (u *UnimplementedServerHandler) TEARDOWN(req Request, res Response, tx Transaction) error {
-	panic("implement me")
+	log.Debugf("teardown request url: %s", req.URL().String())
+	ch, ok := u.tc.GetCh(req.Channel())
+	if !ok {
+		return tx.Response(ErrInternal(res))
+	}
+	ch.Teardown(tx)
+	return tx.Response(res)
 }
