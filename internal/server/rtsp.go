@@ -9,6 +9,7 @@ import (
 
 func NewRTSPServer(c *conf.Server, kaka *service.KakaService, logger log.Logger) *rtsp.Server {
 	var opts = []rtsp.ServerOption{
+		rtsp.WithChannel("live"),
 		rtsp.Logger(logger),
 	}
 	if c.Rtsp.Addr != "" {
@@ -26,7 +27,8 @@ func NewRTSPServer(c *conf.Server, kaka *service.KakaService, logger log.Logger)
 	if c.Rtsp.Timeout != nil {
 		opts = append(opts, rtsp.Timeout(c.Rtsp.Timeout.AsDuration()))
 	}
+
 	srv := rtsp.NewServer(opts...)
-	rtsp.RegisterHandler(srv, kaka)
+	//srv.RegisterHandler(methods.ANNOUNCE, kaka.ANNOUNCE)
 	return srv
 }

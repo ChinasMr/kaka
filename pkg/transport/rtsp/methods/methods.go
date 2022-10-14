@@ -1,4 +1,4 @@
-package method
+package methods
 
 type Method string
 

@@ -1,8 +1,10 @@
 package rtsp
 
 import (
+	"fmt"
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/header"
-	"github.com/ChinasMr/kaka/pkg/transport/rtsp/method"
+	"github.com/ChinasMr/kaka/pkg/transport/rtsp/methods"
+	"gortc.io/sdp"
 	"net/url"
 	"strings"
 )
@@ -10,9 +12,10 @@ import (
 var _ Request = (*request)(nil)
 
 type Request interface {
-	Method() method.Method
+	Method() methods.Method
 	URL() *url.URL
 	Path() string
+	Stream() string
 	Headers() map[string][]string
 	Header(key string) ([]string, bool)
 	Transport() (header.TransportHeader, bool)
@@ -21,15 +24,52 @@ type Request interface {
 	SessionID() string
 	ContentType() string
 	Body() []byte
+	Encode() []byte
+	ParseSDP() (*sdp.Message, error)
+	Channel() string
 }
 
 type request struct {
-	method  method.Method
+	method  methods.Method
 	url     *url.URL
 	headers map[string][]string
 	body    []byte
 	cSeq    string
 	proto   string
+}
+
+func (r request) Stream() string {
+	p := strings.TrimLeft(r.Path(), "/")
+	ps := strings.Split(p, "/")
+	if len(ps) < 2 {
+		return ""
+	}
+	return ps[1]
+}
+
+func (r request) ParseSDP() (*sdp.Message, error) {
+	if r.ContentType() != header.ContentTypeSDP {
+		return nil, fmt.Errorf("unsupported presentation description format: %s", r.ContentType())
+	}
+	if len(r.body) == 0 {
+		return nil, fmt.Errorf("paerse sdp error empty request body")
+	}
+	s, err := sdp.DecodeSession(r.body, nil)
+	if err != nil {
+		return nil, err
+	}
+	rv := &sdp.Message{}
+	d := sdp.NewDecoder(s)
+	err = d.Decode(rv)
+	if err != nil {
+		return nil, err
+	}
+	return rv, nil
+}
+
+func (r request) Encode() []byte {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (r request) ContentType() string {
@@ -89,6 +129,15 @@ func (r request) Headers() map[string][]string {
 	return r.headers
 }
 
-func (r request) Method() method.Method {
+func (r request) Method() methods.Method {
 	return r.method
+}
+
+func (r request) Channel() string {
+	str := strings.TrimLeft(r.Path(), "/")
+	index := strings.Index(str, "/")
+	if index != -1 {
+		return str[:index]
+	}
+	return str
 }

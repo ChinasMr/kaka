@@ -42,3 +42,9 @@ func RTCP(rtcp string) ServerOption {
 		s.rtcp = rtcp
 	}
 }
+
+func WithChannel(ch string) ServerOption {
+	return func(s *Server) {
+		s.chs = append(s.chs, ch)
+	}
+}
