@@ -32,6 +32,7 @@ type Transaction interface {
 	PreReady(sdp *sdp.Message) bool
 	PreRecord(sdp *sdp.Message) bool
 	PrePlay(sdp *sdp.Message) bool
+	PreInit()
 	Interleaved() bool
 	ReadInterleavedFrame(frame []byte) (int, uint32, error)
 	WriteInterleavedFrame(channel int, frame []byte) error
@@ -74,6 +75,13 @@ type transaction struct {
 	rf          *rtcpFamily
 }
 
+func (t *transaction) PreInit() {
+	defer t.rwm.Lock()
+	defer t.rwm.Unlock()
+	t.medias = map[string]*Media{}
+	t.state = status.INIT
+}
+
 func (t *transaction) RTCP() int64 {
 	return t.rf.rtcpPort
 }
@@ -91,6 +99,8 @@ func (t *transaction) Interleaved() bool {
 }
 
 func (t *transaction) PrePlay(sdp *sdp.Message) bool {
+	t.rwm.Lock()
+	defer t.rwm.Unlock()
 	interleaved := true
 	for _, m := range t.medias {
 		interleaved = m.interleaved
@@ -110,11 +120,13 @@ func (t *transaction) PrePlay(sdp *sdp.Message) bool {
 		}
 	}
 	t.interleaved = interleaved
-	t.setStatus(status.PLAYING)
+	t.state = status.PLAYING
 	return true
 }
 
 func (t *transaction) PreRecord(sdp *sdp.Message) bool {
+	t.rwm.Lock()
+	defer t.rwm.Unlock()
 	interleaved := true
 	for _, m := range t.medias {
 		interleaved = m.interleaved
@@ -134,11 +146,13 @@ func (t *transaction) PreRecord(sdp *sdp.Message) bool {
 		}
 	}
 	t.interleaved = interleaved
-	t.setStatus(status.RECORDING)
+	t.state = status.RECORDING
 	return true
 }
 
 func (t *transaction) PreReady(sdp *sdp.Message) bool {
+	t.rwm.RLock()
+	defer t.rwm.RUnlock()
 	for _, m := range sdp.Medias {
 		s := m.Attribute("control")
 		_, ok := t.medias[s]
@@ -146,7 +160,7 @@ func (t *transaction) PreReady(sdp *sdp.Message) bool {
 			return false
 		}
 	}
-	t.setStatus(status.READY)
+	t.state = status.READY
 	return true
 }
 
@@ -182,6 +196,7 @@ func (t *transaction) Close() error {
 }
 
 func (t *transaction) Forward(p *Package, wg *sync.WaitGroup) error {
+	// todo there maybe a lock or channel.
 	defer wg.Done()
 	if p.Interleaved && t.interleaved {
 		return t.WriteInterleavedFrame(p.Ch, p.Data[:p.Len])
@@ -207,12 +222,6 @@ func (t *transaction) Forward(p *Package, wg *sync.WaitGroup) error {
 
 func (t *transaction) ID() string {
 	return t.id
-}
-
-func (t *transaction) setStatus(s status.Status) {
-	t.rwm.Lock()
-	t.rwm.Unlock()
-	t.state = s
 }
 
 func (t *transaction) Status() status.Status {

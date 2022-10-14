@@ -10,14 +10,13 @@ var _ TransactionController = (*transactionController)(nil)
 
 type TransactionController interface {
 	CreateTx(trans *transport, rf *rtcpFamily) *transaction
-	DeleteTx(id string)
+	DeleteTx(id *transaction)
 	GetCh(ch string) (Channel, bool)
 	GetOrCreateCh(ch string) Channel
 }
 
 type transactionController struct {
 	chs map[string]Channel
-	txs map[string]*transaction // this is useless !
 	rwm sync.RWMutex
 }
 
@@ -43,7 +42,6 @@ func (t *transactionController) GetOrCreateCh(ch string) Channel {
 func newTransactionController(chs ...string) TransactionController {
 	tc := &transactionController{
 		rwm: sync.RWMutex{},
-		txs: map[string]*transaction{},
 		chs: map[string]Channel{},
 	}
 	for _, ch := range chs {
@@ -56,49 +54,40 @@ func newTransactionController(chs ...string) TransactionController {
 }
 
 func (t *transactionController) CreateTx(trans *transport, rf *rtcpFamily) *transaction {
-	tx := newTx(trans)
+	id, _ := uuid.NewUUID()
+	tx := txPool.Get().(*transaction)
+	tx.id = id.String()
+	tx.transport = trans
 	tx.rf = rf
-	t.rwm.Lock()
-	t.txs[tx.id] = tx
-	t.rwm.Unlock()
 	return tx
 }
 
-func (t *transactionController) DeleteTx(id string) {
-	t.rwm.Lock()
-	tx, ok := t.txs[id]
-	if !ok {
-		return
+func (t *transactionController) DeleteTx(tx *transaction) {
+	for _, ch := range t.chs {
+		_ = ch.Teardown(tx)
 	}
-	delete(t.txs, tx.id)
-	t.rwm.Unlock()
 	_ = tx.Close()
-	putTx(tx)
+
+	tx.id = ""
+	tx.state = status.INIT
+	tx.transport = nil
+	tx.rf = nil
+	tx.medias = map[string]*Media{}
+	tx.rwm = sync.RWMutex{}
+	tx.interleaved = false
+	txPool.Put(tx)
 }
 
 var txPool = &sync.Pool{
 	New: func() any {
 		return &transaction{
-			id:        "",
-			state:     status.INIT,
-			transport: nil,
-			medias:    map[string]*Media{},
+			id:          "",
+			state:       status.INIT,
+			transport:   nil,
+			rf:          nil,
+			medias:      map[string]*Media{},
+			interleaved: false,
+			rwm:         sync.RWMutex{},
 		}
 	},
-}
-
-func newTx(trans *transport) *transaction {
-	id, _ := uuid.NewUUID()
-	tx := txPool.Get().(*transaction)
-	tx.id = id.String()
-	tx.transport = trans
-	return tx
-}
-
-func putTx(tx *transaction) {
-	tx.id = ""
-	tx.state = status.INIT
-	tx.transport = nil
-	tx.medias = map[string]*Media{}
-	txPool.Put(tx)
 }

@@ -63,6 +63,8 @@ func (c *channel) Teardown(tx Transaction) error {
 			c.reset()
 		}
 	}
+	// clear the status. avoid clear twice.
+	tx.PreInit()
 	return nil
 }
 

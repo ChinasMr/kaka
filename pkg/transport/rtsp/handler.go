@@ -197,6 +197,6 @@ func (u *UnimplementedServerHandler) TEARDOWN(req Request, res Response, tx Tran
 	if !ok {
 		return tx.Response(ErrInternal(res))
 	}
-	ch.Teardown(tx)
+	_ = ch.Teardown(tx)
 	return tx.Response(res)
 }
