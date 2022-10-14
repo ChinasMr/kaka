@@ -1,5 +1,6 @@
-
 # kaka
+
+[![Go Report Card](https://goreportcard.com/badge/github.com/ChinasMr/kaka)](https://goreportcard.com/report/github.com/ChinasMr/kaka)
 
 _kaka_ is streaming media server.
 
