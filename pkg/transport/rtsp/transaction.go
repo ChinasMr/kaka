@@ -73,6 +73,7 @@ type transaction struct {
 	rwm         sync.RWMutex
 	interleaved bool
 	rf          *rtcpFamily
+	mu          sync.Mutex
 }
 
 func (t *transaction) PreInit() {
@@ -196,6 +197,8 @@ func (t *transaction) Close() error {
 }
 
 func (t *transaction) Forward(p *Package, wg *sync.WaitGroup) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	// todo there maybe a lock or channel.
 	defer wg.Done()
 	if p.Interleaved && t.interleaved {
