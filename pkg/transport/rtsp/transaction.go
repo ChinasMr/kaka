@@ -76,7 +76,7 @@ type transaction struct {
 }
 
 func (t *transaction) PreInit() {
-	defer t.rwm.Lock()
+	t.rwm.Lock()
 	defer t.rwm.Unlock()
 	t.medias = map[string]*Media{}
 	t.state = status.INIT

@@ -174,7 +174,7 @@ func (s *Server) handleRawConn(conn net.Conn) {
 	defer func() {
 		if tx != nil {
 			s.log.Debugf("destroy session %s for %s", trans.Addr(), tx.id)
-			s.tc.DeleteTx(tx.id)
+			s.tc.DeleteTx(tx)
 		}
 	}()
 	for {
