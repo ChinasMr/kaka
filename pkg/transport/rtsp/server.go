@@ -164,12 +164,16 @@ func (s *Server) serveRawRTCP(addr netip.AddrPort, bytes []byte) {
 
 }
 func (s *Server) handleRawConn(conn net.Conn) {
-	trans := newTransport(conn)
+	trans, err := newTransport(conn)
+	if err != nil {
+		s.log.Errorf("can not create transport: %v", err)
+		return
+	}
 	tx := s.tc.CreateTx(trans, s.rf)
-	s.log.Errorf("create new session for %s: %s", trans.Addr(), tx.id)
+	s.log.Debugf("create new session for %s: %s", trans.Addr(), tx.id)
 	defer func() {
 		if tx != nil {
-			s.log.Errorf("destroy session %s for %s", trans.Addr(), tx.id)
+			s.log.Debugf("destroy session %s for %s", trans.Addr(), tx.id)
 			s.tc.DeleteTx(tx.id)
 		}
 	}()

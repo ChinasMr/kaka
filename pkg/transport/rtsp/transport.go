@@ -10,6 +10,7 @@ var _ Transport = (*transport)(nil)
 
 type Transport interface {
 	Addr() string
+	IP() net.IP
 	Parse() (*request, error)
 	Write(data []byte) error
 	Read(buf []byte) (int, error)
@@ -19,16 +20,27 @@ type Transport interface {
 
 type transport struct {
 	conn net.Conn
+	addr *net.TCPAddr
+}
+
+func (g *transport) IP() net.IP {
+	return g.addr.IP
 }
 
 func (g *transport) Conn() net.Conn {
 	return g.conn
 }
 
-func newTransport(conn net.Conn) *transport {
+func newTransport(conn net.Conn) (*transport, error) {
+	conn.RemoteAddr()
+	addr, err := net.ResolveTCPAddr(conn.RemoteAddr().Network(), conn.RemoteAddr().String())
+	if err != nil {
+		return nil, err
+	}
 	return &transport{
 		conn: conn,
-	}
+		addr: addr,
+	}, nil
 }
 
 func (g *transport) Write(data []byte) error {

@@ -18,6 +18,7 @@ type Media struct {
 	record      bool
 	rtp         int64
 	rtcp        int64
+	order       int
 }
 
 type Transaction interface {
@@ -45,6 +46,22 @@ type rtcpFamily struct {
 	rtcpConn *net.UDPConn
 	rtpPort  int64
 	rtcpPort int64
+}
+
+func (rt rtcpFamily) RTP(data []byte, ip net.IP, port int64) error {
+	_, err := rt.rtpConn.WriteTo(data, &net.UDPAddr{
+		IP:   ip,
+		Port: int(port),
+	})
+	return err
+}
+
+func (rt rtcpFamily) RTCP(data []byte, ip net.IP, port int64) error {
+	_, err := rt.rtcpConn.WriteTo(data, &net.UDPAddr{
+		IP:   ip,
+		Port: int(port),
+	})
+	return err
 }
 
 type transaction struct {
@@ -142,6 +159,13 @@ func (t *transaction) Medias() map[string]*Media {
 func (t *transaction) AddMedia(media *Media) {
 	t.rwm.Lock()
 	t.rwm.Unlock()
+	has, ok := t.medias[media.control]
+	if ok {
+		media.order = has.order
+		t.medias[media.control] = media
+		return
+	}
+	media.order = len(t.medias)
 	t.medias[media.control] = media
 }
 
@@ -159,10 +183,24 @@ func (t *transaction) Close() error {
 
 func (t *transaction) Forward(p *Package, wg *sync.WaitGroup) error {
 	defer wg.Done()
-	if p.Interleaved {
+	if p.Interleaved && t.interleaved {
 		return t.WriteInterleavedFrame(p.Ch, p.Data[:p.Len])
-	} else {
+	} else if p.Interleaved && !t.interleaved {
+		// interleaved frame trans to rtp/rtcp frame.
+		for _, m := range t.medias {
+			if m.order == p.Ch/2 {
+				if p.Ch%2 == 0 {
+					return t.rf.RTP(p.Data[:p.Len], t.transport.IP(), m.rtp)
+				}
+				if p.Ch%2 == 1 {
+					return t.rf.RTCP(p.Data[:p.Len], t.transport.IP(), m.rtcp)
+				}
+				break
+			}
+		}
 
+		return nil
+	} else {
 		return nil
 	}
 }
