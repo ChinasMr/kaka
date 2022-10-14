@@ -207,7 +207,8 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 	if !ok {
 		return tx.Response(ErrMethodNotAllowed(res))
 	}
-	if req.method == methods.SETUP {
+	switch req.method {
+	case methods.SETUP:
 		// check state, buf every state can call the setup.
 		// get and check transports header.
 		if transports, has := req.Transport(); !has || !transports.Validate() {
@@ -221,9 +222,7 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 		res.SetHeader(header.Session, tx.id)
 		// call the handle.
 		return handlerFunc(req, res, tx)
-	}
-
-	if req.method == methods.RECORD {
+	case methods.RECORD:
 		// state check
 		if tx.state != status.READY && tx.state != status.RECORDING {
 			return tx.Response(ErrMethodNotValidINThisState(res))
@@ -234,10 +233,7 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 		}
 		res.SetHeader(header.Session, tx.id)
 		return handlerFunc(req, res, tx)
-	}
-
-	// state check
-	if req.method == methods.PLAY {
+	case methods.PLAY:
 		if tx.state != status.READY && tx.state != status.PLAYING {
 			return tx.Response(ErrMethodNotValidINThisState(res))
 		}
@@ -247,9 +243,7 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 		}
 		res.SetHeader(header.Session, tx.id)
 		return handlerFunc(req, res, tx)
-	}
-
-	if req.method == methods.TEARDOWN || req.Method() == methods.DOWN {
+	case methods.TEARDOWN, methods.DOWN:
 		// avoid teardown finished other transaction unexpectedly.
 		sid := req.SessionID()
 		if sid != tx.id {
@@ -257,9 +251,9 @@ func (s *Server) handleRequest(req *request, res *response, tx *transaction) err
 		}
 		_ = handlerFunc(req, res, tx)
 		return io.EOF
+	default:
+		return handlerFunc(req, res, tx)
 	}
-
-	return handlerFunc(req, res, tx)
 }
 
 func (s *Server) RegisterHandleFunc(method methods.Method, fn HandlerFunc) {
