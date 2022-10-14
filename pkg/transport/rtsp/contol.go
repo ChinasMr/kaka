@@ -9,7 +9,7 @@ import (
 var _ TransactionController = (*transactionController)(nil)
 
 type TransactionController interface {
-	CreateTx(trans *transport) *transaction
+	CreateTx(trans *transport, rf *rtcpFamily) *transaction
 	DeleteTx(id string)
 	GetCh(ch string) (Channel, bool)
 	GetOrCreateCh(ch string) Channel
@@ -55,8 +55,9 @@ func newTransactionController(chs ...string) TransactionController {
 	return tc
 }
 
-func (t *transactionController) CreateTx(trans *transport) *transaction {
+func (t *transactionController) CreateTx(trans *transport, rf *rtcpFamily) *transaction {
 	tx := newTx(trans)
+	tx.rf = rf
 	t.rwm.Lock()
 	t.txs[tx.id] = tx
 	t.rwm.Unlock()

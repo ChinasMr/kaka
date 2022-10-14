@@ -30,13 +30,14 @@ type Server struct {
 	mutex            sync.Mutex
 	chs              []string
 	tc               TransactionController
+	rf               *rtcpFamily
 }
 
 func NewServer(opts ...ServerOption) *Server {
 	srv := &Server{
 		network:  "tcp",
 		address:  ":0",
-		rtp:      "30000",
+		rtp:      ":30000",
 		rtcp:     ":30001",
 		mutex:    sync.Mutex{},
 		handlers: map[methods.Method]HandlerFunc{},
@@ -86,12 +87,12 @@ func (s *Server) listen() error {
 	s.lis = lis
 
 	// listen rtp udp.
-	addr, err := net.ResolveUDPAddr("udp", s.rtp)
+	rtpAddr, err := net.ResolveUDPAddr("udp", s.rtp)
 	if err != nil {
 		s.err = err
 		return err
 	}
-	conn, err := net.ListenUDP("udp", addr)
+	conn, err := net.ListenUDP("udp", rtpAddr)
 	if err != nil {
 		s.err = err
 		return err
@@ -99,17 +100,23 @@ func (s *Server) listen() error {
 	s.rtpConn = conn
 
 	// listen rtcp udp.
-	addr, err = net.ResolveUDPAddr("udp", s.rtcp)
+	rtcpAddr, err := net.ResolveUDPAddr("udp", s.rtcp)
 	if err != nil {
 		s.err = err
 		return err
 	}
-	conn, err = net.ListenUDP("udp", addr)
+	conn, err = net.ListenUDP("udp", rtcpAddr)
 	if err != nil {
 		s.err = err
 		return err
 	}
 	s.rtcpConn = conn
+	s.rf = &rtcpFamily{
+		rtpConn:  s.rtpConn,
+		rtcpConn: s.rtcpConn,
+		rtpPort:  int64(rtpAddr.Port),
+		rtcpPort: int64(rtcpAddr.Port),
+	}
 	return s.err
 }
 func (s *Server) serve() error {
@@ -158,7 +165,7 @@ func (s *Server) serveRawRTCP(addr netip.AddrPort, bytes []byte) {
 }
 func (s *Server) handleRawConn(conn net.Conn) {
 	trans := newTransport(conn)
-	tx := s.tc.CreateTx(trans)
+	tx := s.tc.CreateTx(trans, s.rf)
 	s.log.Errorf("create new session for %s: %s", trans.Addr(), tx.id)
 	defer func() {
 		if tx != nil {

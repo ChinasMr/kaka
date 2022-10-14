@@ -103,9 +103,26 @@ func (u *UnimplementedServerHandler) SETUP(req Request, res Response, tx Transac
 				res.SetHeader(header.Transport,
 					header.NewTransportHeader(header.LowerTransTCP,
 						header.ParamUnicast,
-						header.NewInterleavedParam(p1, p2)))
+						header.NewInterleavedParam(p1, p1),
+					))
 			}
 			// add udp stream.
+			if p1, p2, ok1 := tr.ClientPort(); ok1 && !tr.LowerTransportTCP() {
+				log.Debugf("rtp udp port: %d, rtcp udp port: %d", p1, p2)
+				tx.AddMedia(&Media{
+					interleaved: false,
+					rtp:         p1,
+					rtcp:        p2,
+					control:     stream,
+					record:      tr.Record(),
+				})
+				res.SetHeader(header.Transport,
+					header.NewTransportHeader(header.LoweTransUDP,
+						header.ParamUnicast,
+						header.NewClientPort(p1, p2),
+						header.NewServerPort(tx.RTP(), tx.RTCP()),
+					))
+			}
 
 			// send response.
 			err := tx.Response(res)

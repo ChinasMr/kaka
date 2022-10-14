@@ -6,6 +6,7 @@ import (
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"gortc.io/sdp"
 	"io"
+	"net"
 	"sync"
 )
 
@@ -34,7 +35,16 @@ type Transaction interface {
 	ReadInterleavedFrame(frame []byte) (int, uint32, error)
 	WriteInterleavedFrame(channel int, frame []byte) error
 	Read(buf []byte) (int, error)
+	RTCP() int64
+	RTP() int64
 	Close() error
+}
+
+type rtcpFamily struct {
+	rtpConn  *net.UDPConn
+	rtcpConn *net.UDPConn
+	rtpPort  int64
+	rtcpPort int64
 }
 
 type transaction struct {
@@ -44,6 +54,15 @@ type transaction struct {
 	medias      map[string]*Media
 	rwm         sync.RWMutex
 	interleaved bool
+	rf          *rtcpFamily
+}
+
+func (t *transaction) RTCP() int64 {
+	return t.rf.rtcpPort
+}
+
+func (t *transaction) RTP() int64 {
+	return t.rf.rtpPort
 }
 
 func (t *transaction) Read(buf []byte) (int, error) {
@@ -143,6 +162,7 @@ func (t *transaction) Forward(p *Package, wg *sync.WaitGroup) error {
 	if p.Interleaved {
 		return t.WriteInterleavedFrame(p.Ch, p.Data[:p.Len])
 	} else {
+
 		return nil
 	}
 }
