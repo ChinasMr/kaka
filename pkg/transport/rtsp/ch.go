@@ -13,7 +13,9 @@ type Channel interface {
 	SetSDP(tx Transaction, sdp *sdp.Message, raw []byte) bool
 	SDP() *sdp.Message
 	Raw() []byte
-	Lock(id string) bool
+	Lock(tx Transaction) bool
+	Source() Transaction
+	Input() chan *Package
 	Play(tx Transaction) error
 	Record(tx Transaction) error
 	Teardown(tx Transaction) error
@@ -26,15 +28,8 @@ func NewChannel(ch string) Channel {
 		rwm:    sync.RWMutex{},
 		sdp:    &sdp.Message{},
 		raw:    nil,
-		source: "",
+		source: nil,
 		input:  make(chan *Package, 2),
-		pool: sync.Pool{
-			New: func() any {
-				return &Package{
-					Data: make([]byte, 2048),
-				}
-			},
-		},
 	}
 	go rv.serve()
 	return rv
@@ -46,9 +41,18 @@ type channel struct {
 	rwm    sync.RWMutex
 	sdp    *sdp.Message
 	raw    []byte
-	source string
-	pool   sync.Pool
+	source Transaction
 	input  chan *Package
+}
+
+func (c *channel) Input() chan *Package {
+	return c.input
+}
+
+func (c *channel) Source() Transaction {
+	c.rwm.RLock()
+	defer c.rwm.RUnlock()
+	return c.source
 }
 
 func (c *channel) Teardown(tx Transaction) error {
@@ -57,7 +61,7 @@ func (c *channel) Teardown(tx Transaction) error {
 		return nil
 	}
 	if tx.Status() == status.RECORDING {
-		ok := c.Lock(tx.ID())
+		ok := c.Lock(tx)
 		if ok {
 			// the register wanna to deregister the info.
 			c.reset()
@@ -71,7 +75,7 @@ func (c *channel) Teardown(tx Transaction) error {
 func (c *channel) Record(tx Transaction) error {
 	if tx.Interleaved() {
 		for {
-			p := c.newPackage()
+			p := newPackage()
 			ch, l, err := tx.ReadInterleavedFrame(p.Data)
 			if err != nil {
 				return err
@@ -124,7 +128,7 @@ func (c *channel) serve() {
 			}
 			go func() {
 				wg.Wait()
-				c.putPackage(pack)
+				putPackage(pack)
 				// todo refresh the live keeper.
 			}()
 		}
@@ -135,18 +139,18 @@ func (c *channel) reset() {
 	c.rwm.Lock()
 	c.sdp = &sdp.Message{}
 	c.raw = nil
-	c.source = ""
+	c.source = nil
 	c.rwm.Unlock()
 }
 
-func (c *channel) Lock(id string) bool {
+func (c *channel) Lock(tx Transaction) bool {
 	c.rwm.Lock()
 	defer c.rwm.Unlock()
-	if c.source == "" {
-		c.source = id
+	if c.source == nil {
+		c.source = tx
 		return true
 	} else {
-		if c.source == id {
+		if c.source == tx {
 			return true
 		}
 	}
@@ -160,7 +164,7 @@ func (c *channel) SDP() *sdp.Message {
 }
 
 func (c *channel) SetSDP(tx Transaction, sdp *sdp.Message, raw []byte) bool {
-	ok := c.Lock(tx.ID())
+	ok := c.Lock(tx)
 	if !ok {
 		return false
 	}
@@ -171,15 +175,4 @@ func (c *channel) SetSDP(tx Transaction, sdp *sdp.Message, raw []byte) bool {
 	return true
 	// A server MAY refuse to change parameters of an existing stream.
 	// todo they maybe a call back function.
-}
-
-func (c *channel) newPackage() *Package {
-	return c.pool.Get().(*Package)
-}
-
-func (c *channel) putPackage(p *Package) {
-	p.Len = 0
-	p.Ch = 0
-	p.Interleaved = false
-	c.pool.Put(p)
 }

@@ -16,13 +16,14 @@ type Media struct {
 	control     string
 	interleaved bool
 	record      bool
-	rtp         int64
-	rtcp        int64
+	rtp         int
+	rtcp        int
 	order       int
 }
 
 type Transaction interface {
 	ID() string
+	IP() net.IP
 	Status() status.Status
 	Forward(p *Package, wg *sync.WaitGroup) error
 	Response(res Response) error
@@ -37,30 +38,30 @@ type Transaction interface {
 	ReadInterleavedFrame(frame []byte) (int, uint32, error)
 	WriteInterleavedFrame(channel int, frame []byte) error
 	Read(buf []byte) (int, error)
-	RTCP() int64
-	RTP() int64
+	RTCP() int
+	RTP() int
 	Close() error
 }
 
 type rtcpFamily struct {
 	rtpConn  *net.UDPConn
 	rtcpConn *net.UDPConn
-	rtpPort  int64
-	rtcpPort int64
+	rtpPort  int
+	rtcpPort int
 }
 
-func (rt rtcpFamily) RTP(data []byte, ip net.IP, port int64) error {
+func (rt rtcpFamily) RTP(data []byte, ip net.IP, port int) error {
 	_, err := rt.rtpConn.WriteTo(data, &net.UDPAddr{
 		IP:   ip,
-		Port: int(port),
+		Port: port,
 	})
 	return err
 }
 
-func (rt rtcpFamily) RTCP(data []byte, ip net.IP, port int64) error {
+func (rt rtcpFamily) RTCP(data []byte, ip net.IP, port int) error {
 	_, err := rt.rtcpConn.WriteTo(data, &net.UDPAddr{
 		IP:   ip,
-		Port: int(port),
+		Port: port,
 	})
 	return err
 }
@@ -76,6 +77,10 @@ type transaction struct {
 	mu          sync.Mutex
 }
 
+func (t *transaction) IP() net.IP {
+	return t.transport.IP()
+}
+
 func (t *transaction) PreInit() {
 	t.rwm.Lock()
 	defer t.rwm.Unlock()
@@ -83,11 +88,11 @@ func (t *transaction) PreInit() {
 	t.state = status.INIT
 }
 
-func (t *transaction) RTCP() int64 {
+func (t *transaction) RTCP() int {
 	return t.rf.rtcpPort
 }
 
-func (t *transaction) RTP() int64 {
+func (t *transaction) RTP() int {
 	return t.rf.rtpPort
 }
 
@@ -197,11 +202,9 @@ func (t *transaction) Close() error {
 }
 
 func (t *transaction) Forward(p *Package, wg *sync.WaitGroup) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	// todo there maybe a lock or channel.
 	defer wg.Done()
-	if p.Interleaved && t.interleaved {
+	if t.interleaved {
 		return t.WriteInterleavedFrame(p.Ch, p.Data[:p.Len])
 	} else if p.Interleaved && !t.interleaved {
 		// interleaved frame trans to rtp/rtcp frame.
@@ -216,7 +219,6 @@ func (t *transaction) Forward(p *Package, wg *sync.WaitGroup) error {
 				break
 			}
 		}
-
 		return nil
 	} else {
 		return nil
@@ -234,6 +236,8 @@ func (t *transaction) Status() status.Status {
 }
 
 func (t *transaction) WriteInterleavedFrame(channel int, frame []byte) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	buf := make([]byte, 2048)
 	buf[0] = 0x24
 	buf[1] = byte(channel)

@@ -3,6 +3,7 @@ package rtsp
 import (
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"github.com/google/uuid"
+	"net"
 	"sync"
 )
 
@@ -13,11 +14,57 @@ type TransactionController interface {
 	DeleteTx(id *transaction)
 	GetCh(ch string) (Channel, bool)
 	GetOrCreateCh(ch string) Channel
+	Forward(p *Package, addr *net.UDPAddr)
+}
+
+type forwarder struct {
+	addr   *net.UDPAddr
+	input  chan *Package
+	output chan *Package
+}
+
+func (t *transactionController) serve(f *forwarder) {
+	for p := range f.input {
+		if f.output != nil {
+			f.output <- p
+			continue
+		}
+		// try to find the corrected channel.
+		for _, ch := range t.chs {
+			if !f.addr.IP.Equal(ch.Source().IP()) {
+				continue
+			}
+			for _, m := range ch.Source().Medias() {
+				if m.interleaved || !m.record {
+					continue
+				}
+				if f.addr.Port == m.rtp || f.addr.Port == m.rtcp {
+					f.output = ch.Input()
+					f.output <- p
+					continue
+				}
+			}
+		}
+		// can not find relative ch, return.
+	}
 }
 
 type transactionController struct {
-	chs map[string]Channel
-	rwm sync.RWMutex
+	chs        map[string]Channel
+	rwm        sync.RWMutex
+	forwarders map[string]*forwarder
+}
+
+func (t *transactionController) Forward(p *Package, addr *net.UDPAddr) {
+	f, ok := t.forwarders[addr.String()]
+	if ok {
+		f.input <- p
+		return
+	}
+	f = &forwarder{addr: addr, input: make(chan *Package, 5), output: nil}
+	t.forwarders[addr.String()] = f
+	go t.serve(f)
+	f.input <- p
 }
 
 func (t *transactionController) GetCh(ch string) (Channel, bool) {

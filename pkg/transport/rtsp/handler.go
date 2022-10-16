@@ -166,7 +166,7 @@ func (u *UnimplementedServerHandler) RECORD(req Request, res Response, tx Transa
 	if !ok {
 		return tx.Response(ErrInternal(res))
 	}
-	ok = ch.Lock(tx.ID())
+	ok = ch.Lock(tx)
 	if !ok {
 		return tx.Response(ErrInternal(res))
 	}

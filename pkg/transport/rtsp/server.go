@@ -8,7 +8,6 @@ import (
 	"github.com/ChinasMr/kaka/pkg/transport/rtsp/status"
 	"io"
 	"net"
-	"net/netip"
 	"sync"
 	"time"
 )
@@ -114,31 +113,37 @@ func (s *Server) listen() error {
 	s.rf = &rtcpFamily{
 		rtpConn:  s.rtpConn,
 		rtcpConn: s.rtcpConn,
-		rtpPort:  int64(rtpAddr.Port),
-		rtcpPort: int64(rtcpAddr.Port),
+		rtpPort:  rtpAddr.Port,
+		rtcpPort: rtcpAddr.Port,
 	}
 	return s.err
 }
 func (s *Server) serve() error {
 	go func() {
 		for true {
-			buf := make([]byte, 2048)
-			n, addr, err := s.rtpConn.ReadFromUDPAddrPort(buf)
+			p := newPackage()
+			n, addr, err := s.rtpConn.ReadFromUDP(p.Data)
 			if err != nil {
 				return
 			}
-			go s.serveRawRTP(addr, buf[:n])
+			p.Len = uint32(n)
+			p.Ch = 0
+			p.Interleaved = false
+			go s.tc.Forward(p, addr)
 		}
 	}()
 
 	go func() {
 		for true {
-			buf := make([]byte, 2048)
-			n, addr, err := s.rtcpConn.ReadFromUDPAddrPort(buf)
+			p := newPackage()
+			n, addr, err := s.rtcpConn.ReadFromUDP(p.Data)
 			if err != nil {
 				return
 			}
-			go s.serveRawRTCP(addr, buf[:n])
+			p.Len = uint32(n)
+			p.Ch = 1
+			p.Interleaved = false
+			go s.tc.Forward(p, addr)
 		}
 	}()
 
@@ -157,12 +162,6 @@ func (s *Server) serve() error {
 
 }
 
-func (s *Server) serveRawRTP(addr netip.AddrPort, bytes []byte) {
-
-}
-func (s *Server) serveRawRTCP(addr netip.AddrPort, bytes []byte) {
-
-}
 func (s *Server) handleRawConn(conn net.Conn) {
 	trans, err := newTransport(conn)
 	if err != nil {

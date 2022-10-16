@@ -25,15 +25,15 @@ func NewTransportHeader(lt string, param ...string) string {
 	return strings.Join(ks, ";")
 }
 
-func NewInterleavedParam(ch1 int64, ch2 int64) string {
+func NewInterleavedParam(ch1 int, ch2 int) string {
 	return fmt.Sprintf("%s=%d-%d", paramInterleaved, ch1, ch2)
 }
 
-func NewClientPort(p1 int64, p2 int64) string {
+func NewClientPort(p1 int, p2 int) string {
 	return fmt.Sprintf("%s=%d-%d", clientPort, p1, p2)
 }
 
-func NewServerPort(p1 int64, p2 int64) string {
+func NewServerPort(p1 int, p2 int) string {
 	return fmt.Sprintf("%s=%d-%d", serverPort, p1, p2)
 }
 
@@ -66,7 +66,7 @@ func (t TransportHeader) Multicast() bool {
 	return false
 }
 
-func (t TransportHeader) Interleaved() (int64, int64, bool) {
+func (t TransportHeader) Interleaved() (int, int, bool) {
 	v := t.Value(paramInterleaved)
 	if v == "" {
 		return 0, 0, false
@@ -76,18 +76,18 @@ func (t TransportHeader) Interleaved() (int64, int64, bool) {
 	if len(ps) != 2 {
 		return 0, 0, false
 	}
-	c1, err := strconv.ParseInt(ps[0], 10, 64)
+	c1, err := strconv.ParseInt(ps[0], 10, 32)
 	if err != nil {
 		return 0, 0, false
 	}
-	c2, err := strconv.ParseInt(ps[1], 10, 64)
+	c2, err := strconv.ParseInt(ps[1], 10, 32)
 	if err != nil {
 		return 0, 0, false
 	}
-	return c1, c2, true
+	return int(c1), int(c2), true
 }
 
-func (t TransportHeader) ClientPort() (int64, int64, bool) {
+func (t TransportHeader) ClientPort() (int, int, bool) {
 	v := t.Value(clientPort)
 	if v == "" {
 		return 0, 0, false
@@ -96,15 +96,15 @@ func (t TransportHeader) ClientPort() (int64, int64, bool) {
 	if len(ps) != 2 {
 		return 0, 0, false
 	}
-	c1, err := strconv.ParseInt(ps[0], 10, 64)
+	c1, err := strconv.ParseInt(ps[0], 10, 32)
 	if err != nil {
 		return 0, 0, false
 	}
-	c2, err := strconv.ParseInt(ps[1], 10, 64)
+	c2, err := strconv.ParseInt(ps[1], 10, 32)
 	if err != nil {
 		return 0, 0, false
 	}
-	return c1, c2, true
+	return int(c1), int(c2), true
 }
 
 func (t TransportHeader) Record() bool {
