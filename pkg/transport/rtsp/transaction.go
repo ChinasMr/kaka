@@ -202,9 +202,20 @@ func (t *transaction) Close() error {
 }
 
 func (t *transaction) Forward(p *Package, wg *sync.WaitGroup) error {
-	// todo there maybe a lock or channel.
 	defer wg.Done()
-	if t.interleaved {
+	// there two kinds of package
+	// 1. from the tcp connection, interleaved.
+	// Package:
+	// 		Ch 			-> ch
+	//      Interleaved -> True
+	//		Order		-> *
+	// 2. from the udp connection.
+	// Package:
+	//		Ch 			-> 0(rtp)/1(rtcp)
+	//		Interleaved -> False
+	//		Order		-> order
+
+	if p.Interleaved && t.interleaved {
 		return t.WriteInterleavedFrame(p.Ch, p.Data[:p.Len])
 	} else if p.Interleaved && !t.interleaved {
 		// interleaved frame trans to rtp/rtcp frame.
@@ -214,6 +225,23 @@ func (t *transaction) Forward(p *Package, wg *sync.WaitGroup) error {
 					return t.rf.RTP(p.Data[:p.Len], t.transport.IP(), m.rtp)
 				}
 				if p.Ch%2 == 1 {
+					return t.rf.RTCP(p.Data[:p.Len], t.transport.IP(), m.rtcp)
+				}
+				break
+			}
+		}
+		return nil
+	} else if !p.Interleaved && t.interleaved {
+		// 0 * 2 = 0 + 0/1 = ch 0/1
+		// 1 * 2 = 2 + 0/1 = ch 2/3
+		return t.WriteInterleavedFrame(2*p.Order+p.Ch, p.Data[:p.Len])
+	} else if !p.Interleaved && !t.interleaved {
+		for _, m := range t.medias {
+			if m.order == p.Order {
+				if p.Ch == 0 {
+					return t.rf.RTP(p.Data[:p.Len], t.transport.IP(), m.rtp)
+				}
+				if p.Ch == 1 {
 					return t.rf.RTCP(p.Data[:p.Len], t.transport.IP(), m.rtcp)
 				}
 				break

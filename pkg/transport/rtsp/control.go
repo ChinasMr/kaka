@@ -19,6 +19,7 @@ type TransactionController interface {
 
 type forwarder struct {
 	addr   *net.UDPAddr
+	order  int
 	input  chan *Package
 	output chan *Package
 }
@@ -26,26 +27,35 @@ type forwarder struct {
 func (t *transactionController) serve(f *forwarder) {
 	for p := range f.input {
 		if f.output != nil {
+			p.Order = f.order
 			f.output <- p
 			continue
 		}
 		// try to find the corrected channel.
-		for _, ch := range t.chs {
-			if !f.addr.IP.Equal(ch.Source().IP()) {
-				continue
-			}
-			for _, m := range ch.Source().Medias() {
-				if m.interleaved || !m.record {
+		ok := func() bool {
+			for _, ch := range t.chs {
+				if !f.addr.IP.Equal(ch.Source().IP()) {
 					continue
 				}
-				if f.addr.Port == m.rtp || f.addr.Port == m.rtcp {
-					f.output = ch.Input()
-					f.output <- p
-					continue
+				for _, m := range ch.Source().Medias() {
+					if m.interleaved || !m.record {
+						continue
+					}
+					if f.addr.Port == m.rtp || f.addr.Port == m.rtcp {
+						f.output = ch.Input()
+						f.order = m.order
+						return true
+					}
 				}
 			}
+			return false
+		}()
+		if ok {
+			f.output <- p
+		} else {
+			// can not find relative ch, return.
+			// todo need clear relative resource.
 		}
-		// can not find relative ch, return.
 	}
 }
 
@@ -88,8 +98,9 @@ func (t *transactionController) GetOrCreateCh(ch string) Channel {
 
 func newTransactionController(chs ...string) TransactionController {
 	tc := &transactionController{
-		rwm: sync.RWMutex{},
-		chs: map[string]Channel{},
+		rwm:        sync.RWMutex{},
+		chs:        map[string]Channel{},
+		forwarders: map[string]*forwarder{},
 	}
 	for _, ch := range chs {
 		if len(ch) == 0 {

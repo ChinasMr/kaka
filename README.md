@@ -17,5 +17,4 @@ We 100% copied some code from kratos.Why not just import?
 
 ### Features
 
-* Publish rtsp stream via TCP(interleaved).
-* Play rtsp stream via TCP and UDP.
+* Publish and Play rtsp stream via TCP and UDP.

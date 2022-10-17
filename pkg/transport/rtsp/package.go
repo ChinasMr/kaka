@@ -13,8 +13,9 @@ func newPackage() *Package {
 }
 
 func putPackage(p *Package) {
-	p.Len = 0
 	p.Ch = 0
+	p.Len = 0
+	p.Order = 0
 	p.Interleaved = false
 	packagePool.Put(p)
 }
@@ -22,6 +23,7 @@ func putPackage(p *Package) {
 type Package struct {
 	Ch          int
 	Len         uint32
+	Order       int
 	Interleaved bool
 	Data        []byte
 }
